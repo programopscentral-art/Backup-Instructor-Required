@@ -1,17 +1,20 @@
+import { cache } from "react";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
 /**
  * Like createClient(), but guarantees the auth session is loaded onto the
- * client before you run any RLS-protected query or mutation. Without this the
- * first request on a fresh server client goes out anonymous and RLS returns
- * nothing / blocks writes. Use this in Server Components and Server Actions.
+ * client before you run any RLS-protected query or mutation.
+ *
+ * Wrapped in React cache(): within a single request, every caller shares ONE
+ * client and ONE getUser() validation — instead of each page/helper doing its
+ * own network round-trip to the auth server (the main source of nav latency).
  */
-export async function createAuthedClient() {
+export const createAuthedClient = cache(async () => {
   const supabase = await createClient();
   await supabase.auth.getUser();
   return supabase;
-}
+});
 
 /**
  * Supabase client for Server Components, Route Handlers and Server Actions.

@@ -12,17 +12,16 @@ import {
 } from "lucide-react";
 import { getSessionContext } from "@/lib/auth/session";
 import { isAdminLike, ROLE_LABELS, type AppRole } from "@/lib/auth/roles";
-import { createClient } from "@/lib/supabase/server";
+import { createAuthedClient } from "@/lib/supabase/server";
 import type { CSSProperties } from "react";
 import { themeFor } from "@/lib/theme/role-theme";
 import { StatCard } from "@/components/ui/StatCard";
 import { Stagger, StaggerItem, FadeIn } from "@/components/ui/motion";
 
 async function count(table: string) {
-  const supabase = await createClient();
-  // Ensure the auth session is loaded on THIS client before the RLS'd query,
-  // otherwise the request goes out anonymous and RLS returns 0.
-  await supabase.auth.getUser();
+  // createAuthedClient is request-cached, so all six counts share one client
+  // and one auth validation instead of six separate round-trips.
+  const supabase = await createAuthedClient();
   const { count } = await supabase.from(table).select("*", { count: "exact", head: true });
   return count ?? 0;
 }

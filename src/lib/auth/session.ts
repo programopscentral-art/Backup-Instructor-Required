@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import type { AppRole, Profile, RoleAssignment } from "./roles";
 
@@ -12,8 +13,11 @@ export interface SessionContext {
 /**
  * Loads the current user's profile + role assignments in one place.
  * Returns null when there is no authenticated user.
+ *
+ * cache()'d so the layout AND the page in one navigation share a single call
+ * (one getUser + one profile/roles query) instead of each re-doing the work.
  */
-export async function getSessionContext(): Promise<SessionContext | null> {
+export const getSessionContext = cache(async (): Promise<SessionContext | null> => {
   if (
     !process.env.NEXT_PUBLIC_SUPABASE_URL ||
     !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -22,11 +26,9 @@ export async function getSessionContext(): Promise<SessionContext | null> {
   }
 
   const supabase = await createClient();
-
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
   if (!user) return null;
 
   const [{ data: profile }, { data: assignments }] = await Promise.all([
@@ -50,4 +52,4 @@ export async function getSessionContext(): Promise<SessionContext | null> {
     roles: rows.map((r) => r.role),
     assignments: rows,
   };
-}
+});
