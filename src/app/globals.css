@@ -1,26 +1,382 @@
 @import "tailwindcss";
 
+/* ============================================================
+   NIAT Backup Instructor — brand system (matches niatindia.com)
+   Light · warm cream · deep crimson accent · Satoshi + Inter
+   ============================================================ */
+
+@theme {
+  --color-bg: #fafaf8;
+  --color-surface: #ffffff;
+  --color-ink: #1e293b;
+  --color-muted: #64748b;
+  --color-faint: #94a3b8;
+  --color-line: #eceae4;
+  --color-crimson: #991b1b;
+  --color-amber: #b45309;
+  --color-emerald: #047857;
+
+  --font-serif: "Cormorant Garamond", ui-serif, Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --font-display: "Satoshi", ui-sans-serif, system-ui, sans-serif;
+  --bg: #fafaf8;
+  --cream: #fefbf7;
+  --cream-2: #fff8eb;
+  --surface: #ffffff;
+  --ink: #1e293b;
+  --ink-strong: #0f172a;
+  --muted: #64748b;
+  --faint: #94a3b8;
+  --line: #ece9e2;
+  --line-2: #e0dcd2;
+  --accent: #991b1b;       /* NIAT crimson (overridden per role) */
+  --accent-2: #b91c1c;     /* brighter red */
+  --accent-ink: #7f1d1d;
+  --accent-soft: #fdeceb;
+  --accent-rgb: 153, 27, 27;
+  --amber: #b45309;
+  --amber-soft: #fff4e2;
+  --emerald: #047857;
+  --emerald-soft: #e7f6ef;
+  --blue: #1d4ed8;
+  --blue-soft: #e9eefc;
+  --rose: #be123c;
+  --shadow-sm: 0 1px 2px rgba(30, 41, 59, 0.06), 0 1px 3px rgba(30, 41, 59, 0.05);
+  --shadow: 0 4px 12px -2px rgba(30, 41, 59, 0.08), 0 12px 32px -12px rgba(30, 41, 59, 0.14);
+  --shadow-brand: 0 10px 30px -10px rgba(153, 27, 27, 0.4);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+* {
+  box-sizing: border-box;
 }
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  scroll-behavior: smooth;
 }
-
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* ---------- Warm brand backdrop ---------- */
+.aurora-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background: radial-gradient(900px 500px at 12% -8%, rgba(153, 27, 27, 0.06), transparent 60%),
+    radial-gradient(900px 600px at 92% -4%, rgba(180, 83, 9, 0.07), transparent 55%),
+    radial-gradient(1000px 700px at 50% 108%, rgba(153, 27, 27, 0.04), transparent 60%),
+    linear-gradient(180deg, var(--cream), var(--bg) 40%);
+}
+.grid-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: linear-gradient(rgba(30, 41, 59, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(30, 41, 59, 0.04) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 70% 50% at 50% 0%, black, transparent 70%);
+  opacity: 0.5;
+}
+
+/* ---------- Surfaces ---------- */
+.glass {
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-radius: 22px;
+  box-shadow: var(--shadow);
+}
+.glass-2 {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+}
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  box-shadow: var(--shadow-sm);
+}
+.card-hover {
+  transition: transform 0.25s cubic-bezier(0.2, 0.7, 0.2, 1), border-color 0.25s, box-shadow 0.25s;
+}
+.card-hover:hover {
+  transform: translateY(-4px);
+  border-color: rgba(var(--accent-rgb), 0.35);
+  box-shadow: 0 20px 44px -20px rgba(var(--accent-rgb), 0.4);
+}
+
+/* ---------- Text accents ---------- */
+.gradient-text {
+  background: linear-gradient(100deg, #991b1b, #dc2626 55%, #b45309);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.serif {
+  font-family: var(--font-serif);
+  font-style: italic;
+}
+.hairline {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--line-2), transparent);
+}
+
+/* ---------- Buttons ---------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 14px;
+  padding: 10px 20px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: transform 0.15s, box-shadow 0.2s, background 0.2s, border-color 0.2s;
+  white-space: nowrap;
+}
+.btn:active {
+  transform: translateY(1px) scale(0.99);
+}
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.btn-primary {
+  color: #fff;
+  background: var(--accent);
+  box-shadow: var(--shadow-brand);
+}
+.btn-primary:hover {
+  background: #85171a;
+}
+.btn-ghost {
+  color: var(--ink);
+  background: #fff;
+  border-color: var(--line-2);
+}
+.btn-ghost:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.btn-danger {
+  color: #9f1239;
+  background: #fdecef;
+  border-color: #f6c9d3;
+}
+.btn-danger:hover {
+  background: #fbd8de;
+}
+.btn-sm {
+  padding: 6px 13px;
+  font-size: 12.5px;
+}
+
+/* ---------- Inputs ---------- */
+.input,
+.select {
+  width: 100%;
+  background: #fff;
+  border: 1px solid var(--line-2);
+  border-radius: 11px;
+  padding: 10px 12px;
+  font-size: 14px;
+  color: var(--ink);
+  transition: border-color 0.2s, box-shadow 0.2s;
+  outline: none;
+}
+.input::placeholder {
+  color: var(--faint);
+}
+.input:focus,
+.select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(153, 27, 27, 0.12);
+}
+.select option {
+  color: var(--ink);
+}
+.label {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+/* ---------- Pills / badges ---------- */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 11px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  border: 1px solid transparent;
+}
+.pill-accent { color: var(--accent); background: var(--accent-soft); border-color: #f6d4d2; }
+.pill-crimson { color: var(--accent); background: var(--accent-soft); border-color: #f6d4d2; }
+.pill-amber { color: var(--amber); background: var(--amber-soft); border-color: #fbe3bf; }
+.pill-good { color: var(--emerald); background: var(--emerald-soft); border-color: #c6ebd8; }
+.pill-warn { color: var(--amber); background: var(--amber-soft); border-color: #fbe3bf; }
+.pill-crit { color: var(--rose); background: #fdeef1; border-color: #f6cdd6; }
+.pill-info { color: var(--blue); background: var(--blue-soft); border-color: #cfdcf8; }
+.pill-violet { color: #6d28d9; background: #f1ebfd; border-color: #ddd0f8; }
+.pill-muted { color: var(--muted); background: #f4f3ef; border-color: var(--line-2); }
+
+/* ---------- Tables ---------- */
+.tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+.tbl thead th {
+  text-align: left;
+  padding: 12px 16px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  font-weight: 700;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+  background: var(--cream);
+}
+.tbl tbody td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  vertical-align: middle;
+}
+.tbl tbody tr {
+  transition: background 0.15s;
+}
+.tbl tbody tr:hover {
+  background: var(--cream-2);
+}
+.tbl tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* ---------- Scrollbar ---------- */
+::-webkit-scrollbar { width: 11px; height: 11px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #dcd8cf; border-radius: 10px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: #c9c4b8; }
+
+/* ---------- Live dot ---------- */
+.dot-live {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--emerald);
+  animation: livepulse 2s infinite;
+}
+@keyframes livepulse {
+  0% { box-shadow: 0 0 0 0 rgba(4, 120, 87, 0.4); }
+  70% { box-shadow: 0 0 0 8px rgba(4, 120, 87, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(4, 120, 87, 0); }
+}
+.shimmer {
+  background: linear-gradient(90deg, transparent, rgba(0, 0, 0, 0.05), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+@keyframes shimmer {
+  100% { background-position: 200% 0; }
+}
+
+/* ---------- Role-themed effects ---------- */
+@keyframes floaty {
+  0%, 100% { transform: translateY(0) translateX(0); }
+  50% { transform: translateY(-16px) translateX(6px); }
+}
+@keyframes sheen {
+  0% { background-position: -150% 0; }
+  60%, 100% { background-position: 250% 0; }
+}
+@keyframes gradientMove {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+@keyframes badgePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0.5); }
+  70% { box-shadow: 0 0 0 10px rgba(var(--accent-rgb), 0); }
+}
+
+/* Cursor spotlight — a soft role-tinted glow that follows the pointer */
+.spotlight {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+  background: radial-gradient(
+    440px circle at var(--mx, 50%) var(--my, 50%),
+    rgba(var(--accent-rgb), 0.08),
+    transparent 55%
+  );
+}
+
+/* Animated mesh gradient hero */
+.mesh-hero {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(120deg, var(--grad-from, #991b1b), var(--grad-to, #b45309));
+  background-size: 200% 200%;
+  animation: gradientMove 12s ease infinite;
+}
+.mesh-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(600px circle at 15% 20%, rgba(255, 255, 255, 0.18), transparent 45%),
+    radial-gradient(500px circle at 90% 90%, rgba(0, 0, 0, 0.16), transparent 50%);
+  pointer-events: none;
+}
+.hero-sheen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 35%, rgba(255, 255, 255, 0.22) 50%, transparent 65%);
+  background-size: 250% 100%;
+  animation: sheen 6s ease-in-out infinite;
+  pointer-events: none;
+}
+.orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(36px);
+  opacity: 0.55;
+  pointer-events: none;
+  animation: floaty 10s ease-in-out infinite;
+}
+.badge-pulse {
+  animation: badgePulse 2.4s infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dot-live,
+  .shimmer,
+  .mesh-hero,
+  .hero-sheen::after,
+  .orb,
+  .badge-pulse {
+    animation: none !important;
+  }
 }
