@@ -17,16 +17,21 @@ Admin, HOD (and notifies the subject's CM). We never write back to Zoho.
 
 ---
 
-## The key design point: no University field in Zoho
-The Zoho form has **no University field**. The university is derived from **who
-raised the ticket** — the logged-in staff member (`zoho.loginuserid`). Our endpoint
-resolves their campus from their staff scope in our DB. So the raiser's university
-(and their campus's instructor list) is always correct without them picking it.
+## The key design point: University comes from the record, not a form field
+The Zoho **input form** has no University picker — but the submitted **record** carries
+a `University` field (auto-populated from the submitting staff's Zoho profile, e.g.
+`Malla Reddy Vishwavidyapeeth - Hyderabad`). So the Deluge sends `input.University` and
+our endpoint maps it. Names can drift between Zoho and the product — our matcher is
+**token-tolerant** (`Malla Reddy Vishwavidyapeeth - Hyderabad` → `Malla Reddy University`)
+and uses the `- <City>` suffix to break ties. If a university still can't be matched,
+we **derive it from the raiser** (`zoho.loginuserid` → their campus). Ticket is created
+either way; unmatched ones are flagged for an admin.
 
-## Field mapping (Zoho form → JSON we expect)
-| Zoho field (image 1)        | JSON key we expect     | Notes |
+## Field mapping (Zoho record → JSON we expect)
+| Zoho field                  | JSON key we expect     | Notes |
 | --------------------------- | ---------------------- | ----- |
 | Category (dropdown)         | `category`             | We only accept `Backup Instructor Required` |
+| University (auto)           | `university`           | from the record; token-matched to our DB |
 | Subject (dropdown)          | `subject`              | dynamic from DB |
 | Reason (dropdown)           | `reason`               | dynamic from DB |
 | Instructor needing backup   | `instructor`           | dynamic, by raiser's campus |
@@ -35,7 +40,7 @@ resolves their campus from their staff scope in our DB. So the raiser's universi
 | Backup Required To (date)   | `to_date`              | `yyyy-MM-dd` |
 | Requested Mode (dropdown)   | `mode`                 | **coming soon** — dynamic from DB |
 | Notify Capability Managers  | `notify_cms`           | dynamic CM list; we notify them |
-| _(submitter, automatic)_    | `raised_by_email`      | `zoho.loginuserid` → derives university |
+| _(submitter, automatic)_    | `raised_by_email`      | `zoho.loginuserid` → links raiser + campus backstop |
 
 ---
 
@@ -90,6 +95,7 @@ if(input.Category == "Backup Instructor Required")
 	payload = Map();
 	payload.put("zoho_id", input.ID.toString());
 	payload.put("category", input.Category);
+	payload.put("university", input.University);
 	payload.put("subject", input.Subject);
 	payload.put("reason", input.Reason);
 	payload.put("instructor", input.Instructor_needing_backup);
