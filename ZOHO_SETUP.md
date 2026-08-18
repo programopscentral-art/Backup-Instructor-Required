@@ -1,100 +1,139 @@
 # Zoho Creator → NIAT Backup Instructor (read-only intake)
 
-Zoho is the place universities **raise** tickets. On submit, Zoho pushes the
+Zoho is the place universities **raise** tickets. The Zoho form is a shared
+"Campus & Program Operations Tracker" with a **Category** field; we ingest **only**
+the rows where `Category = "Backup Instructor Required"`. On submit, Zoho pushes the
 ticket to our webhook; it appears **instantly** in the app for the raising staff,
 Admin, HOD (and notifies the subject's CM). We never write back to Zoho.
 
-- **Webhook URL:** `https://<YOUR-PUBLIC-URL>/api/zoho/ticket`
-- **Auth header:** `x-zoho-secret: <YOUR_ZOHO_WEBHOOK_SECRET_FROM_ENV>`
-- **Method:** `POST` · **Body:** JSON
+- **Webhook URL:** `https://backup-instructor-required.vercel.app/api/zoho/ticket`
+- **Options URL:** `https://backup-instructor-required.vercel.app/api/zoho/options`
+- **Auth header (both):** `x-zoho-secret: <YOUR_ZOHO_WEBHOOK_SECRET_FROM_ENV>`
+- **Method:** webhook `POST` (JSON) · options `GET`
+
+> **Dynamic by design.** Every dropdown is fed live from the product DB. When an
+> admin adds a university / subject / instructor / CM in the **product UI**, it
+> shows up in Zoho on the next form load — **no Zoho edits, ever.**
 
 ---
 
-## Step 1 — Make the app reachable by Zoho (public URL)
-Zoho's cloud can't reach `localhost`. Choose one:
+## The key design point: no University field in Zoho
+The Zoho form has **no University field**. The university is derived from **who
+raised the ticket** — the logged-in staff member (`zoho.loginuserid`). Our endpoint
+resolves their campus from their staff scope in our DB. So the raiser's university
+(and their campus's instructor list) is always correct without them picking it.
 
-- **Quick test (local):** run a tunnel →
-  ```bash
-  npx ngrok http 3000
-  ```
-  Use the `https://xxxx.ngrok-free.app` URL it prints.
-- **Production (recommended):** deploy to **Vercel** → use `https://<app>.vercel.app`.
-  (A stable URL means you set the Zoho workflow once.)
+## Field mapping (Zoho form → JSON we expect)
+| Zoho field (image 1)        | JSON key we expect     | Notes |
+| --------------------------- | ---------------------- | ----- |
+| Category (dropdown)         | `category`             | We only accept `Backup Instructor Required` |
+| Subject (dropdown)          | `subject`              | dynamic from DB |
+| Reason (dropdown)           | `reason`               | dynamic from DB |
+| Instructor needing backup   | `instructor`           | dynamic, by raiser's campus |
+| Detailed Description        | `detailed_description` | → ticket notes |
+| Backup Required From (date) | `from_date`            | `yyyy-MM-dd` |
+| Backup Required To (date)   | `to_date`              | `yyyy-MM-dd` |
+| Requested Mode (dropdown)   | `mode`                 | **coming soon** — dynamic from DB |
+| Notify Capability Managers  | `notify_cms`           | dynamic CM list; we notify them |
+| _(submitter, automatic)_    | `raised_by_email`      | `zoho.loginuserid` → derives university |
 
-Confirm it's reachable — open `https://<YOUR-PUBLIC-URL>/api/zoho/ticket` in a
-browser; it should return `{"ok":true,"endpoint":"zoho/ticket","ready":true}`.
+---
 
-## Step 2 — Ticket form fields in Zoho
-Add these fields to your Zoho ticket form (names can differ — you'll map them in
-the script). These match the app's Raise-Ticket form:
+## Step 1 — Test against the live URL (beta → prod)
+Our endpoint is already live on Vercel and pinned to Mumbai. Test from Zoho's
+**Development** environment against the same URL — nothing on our side changes when
+you later publish the Zoho app to production. Confirm it's reachable: open
+`https://backup-instructor-required.vercel.app/api/zoho/ticket` in a browser →
+`{"ok":true,"endpoint":"zoho/ticket","ready":true}`.
 
-| App field                | Zoho field (suggested)     | JSON key we expect |
-| ------------------------ | -------------------------- | ------------------ |
-| University *             | University (dropdown)      | `university`       |
-| Subject *                | Subject (dropdown)         | `subject`          |
-| Reason *                 | Reason (dropdown)          | `reason`           |
-| Instructor needing backup* | Instructor Needing Backup | `instructor`      |
-| Additional notes         | Additional Notes           | `notes`            |
-| Backup needed from       | Backup Needed From (date)  | `from_date`        |
-| Backup needed to         | Backup Needed To (date)    | `to_date`          |
-| Time from                | Time From                  | `time_from`        |
-| Time to                  | Time To                    | `time_to`          |
-| Requested mode           | Requested Mode (dropdown)  | `mode`             |
-| _(submitter, automatic)_ | —                          | `raised_by_email`  |
-
-> University & Subject are matched to our DB by **name** (case-insensitive). Use
-> the same spellings as in the app's Universities / Subjects directories for a
-> clean match. Unmatched ones still create the ticket — an admin resolves it.
-
-## Step 3 — Workflow that pushes to us (Deluge)
-In Zoho Creator → your ticket form → **Workflows** → **On successful form
-submission** → **Custom function / Deluge**, paste (adjust the `input.<Field>`
-names to your actual field link-names):
+## Step 2 — Dynamic dropdowns (Deluge, on form load / a custom function each)
+Each dropdown calls the options feed and populates itself. Create one function per
+dropdown (or a `getUrl`-style workflow). Auth header is the same secret.
 
 ```deluge
-payload = Map();
-payload.put("zoho_id", input.ID.toString());
-payload.put("university", input.University);
-payload.put("subject", input.Subject);
-payload.put("reason", input.Reason);
-payload.put("instructor", input.Instructor_Needing_Backup);
-payload.put("notes", input.Additional_Notes);
-payload.put("from_date", input.Backup_Needed_From.toString("yyyy-MM-dd"));
-payload.put("to_date", input.Backup_Needed_To.toString("yyyy-MM-dd"));
-payload.put("time_from", input.Time_From);
-payload.put("time_to", input.Time_To);
-payload.put("mode", input.Requested_Mode);
-payload.put("raised_by_email", zoho.loginuserid);
-
+// Shared header
 headers = Map();
-headers.put("Content-Type", "application/json");
 headers.put("x-zoho-secret", "<YOUR_ZOHO_WEBHOOK_SECRET_FROM_ENV>");
+base = "https://backup-instructor-required.vercel.app/api/zoho/options";
 
-response = invokeurl
-[
-    url    : "https://<YOUR-PUBLIC-URL>/api/zoho/ticket"
-    type   : POST
-    parameters : payload.toString()
-    headers : headers
-];
-info response;
+// SUBJECTS  → resp.get("subjects")  (list of strings)
+subj = invokeurl [ url: base type: GET headers: headers ];
+
+// REASONS   → resp.get("reasons")
+// MODES     → resp.get("modes")   (use when Requested Mode field is added)
+// (same call as above; read the matching key)
+
+// INSTRUCTOR needing backup — depends on the raiser's campus (by their email):
+insUrl = base + "?type=instructors&email=" + zoho.loginuserid;
+ins = invokeurl [ url: insUrl type: GET headers: headers ];
+// ins.get("instructors") = list like "Ravi Kumar (EMP123)"
+
+// NOTIFY CAPABILITY MANAGERS — dynamic CM list:
+cmUrl = base + "?type=capability_managers";
+cms = invokeurl [ url: cmUrl type: GET headers: headers ];
+// cms.get("capability_managers") = [{label, value(email)}]; store value(email)
+```
+
+> The instructor dropdown uses `email=<raiser>` (not a university name), because the
+> form has no University field. Our endpoint maps that email → their campus →
+> instructors. `Notify Capability Managers` should store each CM's **email** as the
+> value (that's what the webhook expects in `notify_cms`).
+
+## Step 3 — Workflow that pushes to us (Deluge)
+Zoho Creator → your ticket form → **Workflows** → **On successful form submission**
+→ **Custom function / Deluge**. The `if` guard means only Backup-Instructor rows are
+sent (adjust `input.<Field>` to your actual field link-names):
+
+```deluge
+if(input.Category == "Backup Instructor Required")
+{
+	payload = Map();
+	payload.put("zoho_id", input.ID.toString());
+	payload.put("category", input.Category);
+	payload.put("subject", input.Subject);
+	payload.put("reason", input.Reason);
+	payload.put("instructor", input.Instructor_needing_backup);
+	payload.put("detailed_description", input.Detailed_Description);
+	payload.put("from_date", input.Backup_Required_From.toString("yyyy-MM-dd"));
+	payload.put("to_date", input.Backup_Required_To.toString("yyyy-MM-dd"));
+	payload.put("notify_cms", input.Notify_Capability_Managers);
+	// payload.put("mode", input.Requested_Mode);   // uncomment when the field exists
+	payload.put("raised_by_email", zoho.loginuserid);
+
+	headers = Map();
+	headers.put("Content-Type", "application/json");
+	headers.put("x-zoho-secret", "<YOUR_ZOHO_WEBHOOK_SECRET_FROM_ENV>");
+
+	response = invokeurl
+	[
+		url        : "https://backup-instructor-required.vercel.app/api/zoho/ticket"
+		type       : POST
+		parameters : payload.toString()
+		headers    : headers
+	];
+	info response;
+}
 ```
 
 Notes:
-- `zoho.loginuserid` = the email of the staff submitting (used to link them + scope who sees it).
-- `input.ID` = the Zoho record id (used so the same record never creates two tickets).
-- Date fields must be sent as `yyyy-MM-dd`.
+- `zoho.loginuserid` = the submitting staff's email → links them **and** derives the university.
+- `input.ID` = the Zoho record id → same record never creates two tickets (idempotent).
+- Date fields must be `yyyy-MM-dd`.
+- Keep the `mode` line commented until the **Requested Mode** field is added; then uncomment.
 
 ## Step 4 — Test
-Submit a test ticket in Zoho with a University & Subject that exist in the app.
-Within a second it should appear on the app's **Tickets** page (and Dashboard),
-and the raising staff / Admin / HOD get a notification. `info response;` in the
-Deluge log shows our reply: `{"ok":true,"ticket_no":"BIT-####"}`.
+Submit a test row in Zoho with `Category = Backup Instructor Required`, a Subject
+that exists in the app, from a staff account whose campus is in the app. Within a
+second it appears on the app's **Tickets** page (+ Dashboard); the raiser / Admin /
+HOD / selected CMs get notified. `info response;` shows `{"ok":true,"ticket_no":"BIT-####"}`.
+A non-backup category returns `{"ok":true,"skipped":...}` and creates nothing.
 
-## What our endpoint does (already built + tested)
-- Verifies the `x-zoho-secret` (rejects anything else with 401).
-- Maps University/Subject → our records; resolves the subject's Capability + CM.
-- Links the raiser's app account by email (if they have one).
-- Inserts the ticket (`source = 'zoho'`), idempotent by `zoho_record_id`.
-- Notifies the raiser, the subject's Capability Manager, and all Admins/HODs
-  (in-app + email), and Realtime shows it instantly in the UI.
+## What our endpoint does (built + tested)
+- Verifies `x-zoho-secret` (401 otherwise).
+- **Ignores non-`Backup Instructor Required` categories** (defensive; Zoho also guards).
+- Maps Subject → our record; resolves its Capability + CM.
+- **Derives the university from the raiser** (staff scope / directory), payload wins if sent.
+- Links the raiser's app account by email; inserts the ticket (`source='zoho'`),
+  idempotent by `zoho_record_id`.
+- Notifies raiser, subject's CM, all Admins/HODs, **and any CMs picked in
+  "Notify Capability Managers"** (in-app + email); Realtime shows it instantly.

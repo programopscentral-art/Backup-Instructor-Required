@@ -51,17 +51,29 @@ export async function POST(req: Request) {
   }
 
   const zohoId = str(body.zoho_id) || null;
+  const category = str(body.category);
   const universityRaw = str(body.university);
   const subjectRaw = str(body.subject);
   const instructor = str(body.instructor);
   const reason = str(body.reason);
-  const notes = str(body.notes);
+  // Zoho's field is "Detailed Description"; fall back to it when no explicit notes.
+  const notes = str(body.notes) || str(body.detailed_description);
   const fromDate = str(body.from_date) || null;
   const toDate = str(body.to_date) || null;
   const timeFrom = str(body.time_from) || null;
   const timeTo = str(body.time_to) || null;
   const mode = normMode(str(body.mode));
   const raiserEmail = str(body.raised_by_email).toLowerCase() || null;
+  // "Notify Capability Managers" — array (Zoho multi-select) or comma string of emails.
+  const notifyCms: string[] = Array.isArray(body.notify_cms)
+    ? (body.notify_cms as unknown[]).map((x) => str(x)).filter(Boolean)
+    : str(body.notify_cms).split(",").map((s) => s.trim()).filter(Boolean);
+
+  // The Zoho tracker holds many categories; we ONLY ingest Backup-Instructor tickets.
+  // (Zoho also filters on its side, but this is a defensive guard.)
+  if (category && !/backup\s*instructor/i.test(category)) {
+    return NextResponse.json({ ok: true, skipped: "not a backup-instructor ticket" });
+  }
 
   const db = createAdminClient();
 
@@ -95,11 +107,32 @@ export async function POST(req: Request) {
     capabilityId = subj?.[0]?.capability_id ?? null;
   }
 
-  // Resolve the raiser's app account (if they have one).
+  // Resolve the raiser's app account (if they have one), and — because the Zoho
+  // form has no University field — derive their campus from their staff scope
+  // when Zoho didn't send one. Payload university (if any) always wins.
   let raisedBy: string | null = null;
   if (raiserEmail) {
     const { data: prof } = await db.from("profiles").select("id").ilike("email", raiserEmail).maybeSingle();
     raisedBy = prof?.id ?? null;
+    if (!universityId && raisedBy) {
+      const { data: ra } = await db
+        .from("role_assignments")
+        .select("scope_id")
+        .eq("user_id", raisedBy)
+        .eq("role", "university_staff")
+        .eq("scope_type", "university")
+        .limit(1);
+      universityId = (ra?.[0]?.scope_id as string | null) ?? universityId;
+    }
+    // Fallback: match the raiser in the university_staff directory by email.
+    if (!universityId) {
+      const { data: sRow } = await db
+        .from("university_staff")
+        .select("university_id")
+        .ilike("email", raiserEmail)
+        .limit(1);
+      universityId = (sRow?.[0]?.university_id as string | null) ?? universityId;
+    }
   }
 
   const { data: ticket, error } = await db
@@ -170,6 +203,15 @@ export async function POST(req: Request) {
     .in("role", ["admin", "hod"]);
   for (const a of (admins ?? []) as unknown as { user_id: string; profiles: { email: string } | null }[]) {
     recipients.set(a.user_id, { userId: a.user_id, email: a.profiles?.email ?? null });
+  }
+
+  // Explicitly-selected CMs from Zoho's "Notify Capability Managers" field.
+  for (const raw of notifyCms) {
+    const em = raw.toLowerCase();
+    if (!em.includes("@")) continue;
+    const { data: p } = await db.from("profiles").select("id, email").ilike("email", em).maybeSingle();
+    if (p) recipients.set(p.id, { userId: p.id, email: (p as { email: string }).email });
+    else recipients.set(em, { userId: null, email: em });
   }
 
   for (const r of recipients.values()) {

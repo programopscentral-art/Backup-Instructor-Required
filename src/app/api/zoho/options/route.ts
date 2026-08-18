@@ -22,9 +22,31 @@ export async function GET(req: Request) {
   const type = (searchParams.get("type") || "").toLowerCase();
   const db = createAdminClient();
 
-  // Instructors for a given university (dependent dropdown).
+  // Capability Managers list (for Zoho's "Notify Capability Managers" dropdown).
+  if (type === "capability_managers" || type === "cms") {
+    const { data } = await db
+      .from("capabilities")
+      .select("name, manager_name, manager_user_id, profiles:manager_user_id(email)")
+      .eq("status", "active")
+      .order("name");
+    const cms = (data ?? [])
+      .map((c) => {
+        const prof = (c as unknown as { profiles: { email: string } | { email: string }[] | null }).profiles;
+        const email = Array.isArray(prof) ? prof[0]?.email ?? null : prof?.email ?? null;
+        if (!email) return null;
+        const label = c.manager_name ? `${c.manager_name} — ${c.name}` : c.name;
+        return { label, value: email };
+      })
+      .filter(Boolean);
+    return NextResponse.json({ ok: true, capability_managers: cms });
+  }
+
+  // Instructors for a given university (dependent dropdown). The campus can be
+  // named directly (?university=) OR derived from the raiser (?email=) — the Zoho
+  // form has no University field, so email is the normal path.
   if (type === "instructors") {
     const uniRaw = (searchParams.get("university") || "").trim();
+    const email = (searchParams.get("email") || "").trim().toLowerCase();
     let universityId: string | null = null;
     if (uniRaw) {
       const { data: byCode } = await db.from("universities").select("id").ilike("code", uniRaw).maybeSingle();
@@ -32,6 +54,28 @@ export async function GET(req: Request) {
       if (!universityId) {
         const { data: byName } = await db.from("universities").select("id").ilike("name", `%${uniRaw}%`).limit(1);
         universityId = byName?.[0]?.id ?? null;
+      }
+    }
+    // Derive the raiser's campus from their staff scope / directory row.
+    if (!universityId && email) {
+      const { data: prof } = await db.from("profiles").select("id").ilike("email", email).maybeSingle();
+      if (prof) {
+        const { data: ra } = await db
+          .from("role_assignments")
+          .select("scope_id")
+          .eq("user_id", prof.id)
+          .eq("role", "university_staff")
+          .eq("scope_type", "university")
+          .limit(1);
+        universityId = (ra?.[0]?.scope_id as string | null) ?? null;
+      }
+      if (!universityId) {
+        const { data: sRow } = await db
+          .from("university_staff")
+          .select("university_id")
+          .ilike("email", email)
+          .limit(1);
+        universityId = (sRow?.[0]?.university_id as string | null) ?? null;
       }
     }
     if (!universityId) return NextResponse.json({ ok: true, instructors: [] });
