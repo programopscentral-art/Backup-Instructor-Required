@@ -5,6 +5,7 @@ import { getSessionContext } from "@/lib/auth/session";
 import { createAuthedClient } from "@/lib/supabase/server";
 import { isAdminLike } from "@/lib/auth/roles";
 import { notify } from "@/lib/notify";
+import { closeZohoTicket } from "@/lib/zoho/close";
 import type { TicketStatus } from "@/lib/tickets/status";
 
 export interface ActionState {
@@ -205,7 +206,7 @@ export async function transitionTicket(_prev: ActionState, formData: FormData): 
   if (action === "assign" || action === "confirm") {
     const { data: full } = await supabase
       .from("tickets")
-      .select("ticket_no, raised_by, mode, assigned_backup_name, universities(name), subjects(name)")
+      .select("ticket_no, raised_by, mode, assigned_backup_name, source, zoho_record_id, universities(name), subjects(name)")
       .eq("id", ticketId)
       .maybeSingle();
     const f = full as unknown as {
@@ -213,9 +214,25 @@ export async function transitionTicket(_prev: ActionState, formData: FormData): 
       raised_by: string | null;
       mode: string;
       assigned_backup_name: string | null;
+      source: string | null;
+      zoho_record_id: string | null;
       universities: { name: string } | null;
       subjects: { name: string } | null;
     } | null;
+
+    // Backup allocated & dispatched → close the origin Zoho ticket (best-effort).
+    if (action === "confirm" && f?.source === "zoho" && f.zoho_record_id) {
+      const r = await closeZohoTicket(f.zoho_record_id);
+      await logEvent(
+        supabase,
+        ticketId,
+        ctx.userId,
+        "Zoho sync",
+        to,
+        to,
+        r.ok ? "Zoho ticket closed (backup allocated)." : `Zoho close failed: ${r.detail}`,
+      );
+    }
     if (f?.raised_by) {
       const { data: raiser } = await supabase.from("profiles").select("email").eq("id", f.raised_by).maybeSingle();
       const subj = f.subjects?.name ?? "the subject";
