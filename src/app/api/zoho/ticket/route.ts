@@ -56,42 +56,58 @@ function uniTokens(s: string): Set<string> {
   );
 }
 type UniRow = { id: string; code: string | null; name: string; city: string | null };
+
+// Segments that are pure org-prefix noise in a Staff-Profile university string
+// like "NIAT - KKH - Hyderabad" (the campus is the middle segment, not "NIAT").
+const PREFIX_FILLER = new Set(["niat", "nxtwave", "the"]);
+const segIsFiller = (seg: string) => {
+  const ts = seg.split(/\s+/).filter(Boolean);
+  return ts.length > 0 && ts.every((t) => PREFIX_FILLER.has(t));
+};
+
 /**
- * Resolve a Zoho university string to our university id, tolerant of name drift:
- * 1) exact code, 2) name contains raw / raw contains name, 3) best token overlap
- * (subset or Jaccard ≥ 0.5). Returns null if nothing is confident enough.
+ * Resolve a Zoho/Staff-Profile university string to our university id, tolerant of
+ * the two real formats — "NIAT - KKH - Hyderabad" and
+ * "Malla Reddy Vishwavidyapeeth - Hyderabad":
+ *   1) exact code, 2) parse "[NIAT -] <campus> - <city>" then exact-name on campus,
+ *   3) stopword-stripped token overlap on the CAMPUS segment (subset or Jaccard ≥ 0.5),
+ *   using the city segment to break ties. Returns null if nothing is confident enough
+ *   (caller then falls back to deriving the campus from the raiser).
  */
 function resolveUniversityId(raw: string, rows: UniRow[]): string | null {
   const q = raw.trim();
   if (!q) return null;
   const lc = q.toLowerCase();
-  const parts = lc.split(" - ");
-  const namePart = parts[0].trim();
-  const cityPart = parts.length > 1 ? parts.slice(1).join(" - ").trim() : ""; // "…- Hyderabad"
-  // Prefer the row matching the Zoho city when several share a base name.
+  // 1) exact code on the whole string
+  const byCode = rows.find((r) => r.code && r.code.toLowerCase() === lc);
+  if (byCode) return byCode.id;
+  // Parse "[NIAT -] <campus> - <city>": drop filler segments, keep campus + city.
+  const segs = lc.split(" - ").map((s) => s.trim()).filter(Boolean);
+  const sig = segs.filter((s) => !segIsFiller(s));
+  const use = sig.length ? sig : segs;
+  const campus = use[0];
+  const city = use.length > 1 ? use[use.length - 1] : "";
+  // Prefer the row matching the parsed city when several campuses tie.
   const cityPick = (cands: UniRow[]): UniRow | null => {
     if (cands.length <= 1) return cands[0] ?? null;
-    if (cityPart) {
+    if (city) {
       const byCity = cands.find(
-        (r) => (r.city && r.city.toLowerCase() === cityPart) ||
-               r.name.toLowerCase().includes(`(${cityPart})`) ||
-               r.name.toLowerCase().includes(cityPart),
+        (r) => (r.city && r.city.toLowerCase() === city) ||
+               r.name.toLowerCase().includes(`(${city})`) ||
+               r.name.toLowerCase().includes(city),
       );
       if (byCity) return byCity;
     }
     return cands[0];
   };
-  // 1) exact code
-  const byCode = rows.find((r) => r.code && r.code.toLowerCase() === lc);
-  if (byCode) return byCode.id;
-  // 2) direct substring either direction (drop a trailing " - city" from Zoho)
-  const subs = rows.filter((r) => {
+  // 2) exact name on the campus segment (or the whole string)
+  const exact = rows.find((r) => {
     const n = r.name.toLowerCase();
-    return n === lc || n === namePart || n.includes(namePart) || namePart.includes(n) || n.includes(lc) || lc.includes(n);
+    return n === campus || n === lc;
   });
-  if (subs.length) return cityPick(subs)!.id;
-  // 3) token overlap (city breaks ties among equally-scored candidates)
-  const qt = uniTokens(q);
+  if (exact) return exact.id;
+  // 3) token overlap on the campus segment only (city handled separately)
+  const qt = uniTokens(campus);
   if (qt.size === 0) return null;
   let bestScore = 0;
   let bestRows: UniRow[] = [];
