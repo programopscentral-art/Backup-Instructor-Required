@@ -24,9 +24,9 @@ export default function LoginPage() {
               NIAT · Program Ops
             </p>
             <h1 className="mt-3 font-[family-name:var(--font-display)] text-3xl font-bold leading-tight text-[color:var(--ink)]">
-              Backup Instructor
+              Backup
               <br />
-              <span className="gradient-text">Command Center</span>
+              <span className="gradient-text">OS</span>
             </h1>
             <p className="mx-auto mt-3 max-w-xs text-sm text-[color:var(--muted)]">
               Sign in with your{" "}

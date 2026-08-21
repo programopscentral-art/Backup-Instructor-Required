@@ -8,8 +8,8 @@ const sans = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "NIAT · Backup Instructor Platform",
-  description: "Dynamic backup-instructor operations for NIAT universities.",
+  title: "NIAT · Backup OS",
+  description: "Backup OS — arrange, deliver, and settle backup instructors across NIAT campuses.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

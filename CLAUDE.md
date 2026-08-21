@@ -1,6 +1,9 @@
 @AGENTS.md
 
-# NIAT Backup Instructor Platform — Full Project Guide (pin-to-pin)
+# NIAT · Backup OS — Full Project Guide (pin-to-pin)
+
+> **Product name: Backup OS** (part of NIAT's "OS" family — Campus OS, Teach OS).
+> The backup-instructor operations platform.
 
 > This file is the single source of truth for continuing this project in any new
 > session. It captures the product, architecture, every flow, current state, how

@@ -49,7 +49,7 @@ export async function notify(supabase: SB, args: NotifyArgs) {
       subject: args.title,
       html: `<div style="font-family:system-ui,Segoe UI,sans-serif;color:#1e293b;max-width:520px">
         <div style="background:#991b1b;color:#fff;padding:16px 20px;border-radius:12px 12px 0 0">
-          <strong style="font-size:15px">NIAT · Backup Instructor</strong>
+          <strong style="font-size:15px">NIAT · Backup OS</strong>
         </div>
         <div style="border:1px solid #eee;border-top:none;padding:20px;border-radius:0 0 12px 12px">
           <h2 style="margin:0 0 8px;font-size:18px;color:#991b1b">${args.title}</h2>

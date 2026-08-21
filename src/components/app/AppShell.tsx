@@ -350,7 +350,7 @@ function ActiveBg() {
 
 function Brand() {
   return (
-    <Link href="/dashboard" className="flex items-center transition-transform hover:scale-[1.02]">
+    <Link href="/dashboard" className="flex items-center gap-2.5 transition-transform hover:scale-[1.01]">
       <Image
         src="/niat-logo.png"
         alt="NIAT — NxtWave of Innovation in Advanced Technologies"
@@ -359,6 +359,12 @@ function Brand() {
         priority
         className="h-9 w-auto"
       />
+      <span className="hidden items-center gap-2.5 sm:flex">
+        <span className="h-6 w-px bg-[color:var(--line-2)]" />
+        <span className="font-[family-name:var(--font-display)] text-sm font-bold text-[color:var(--accent)]">
+          Backup OS
+        </span>
+      </span>
     </Link>
   );
 }

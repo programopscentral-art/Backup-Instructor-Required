@@ -54,7 +54,7 @@ export function Footer() {
                 />
               </div>
               <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/70">
-                Backup Instructor Platform
+                Backup OS · Program Ops
               </p>
               <p className="mt-2 max-w-sm text-sm leading-relaxed text-white/60">
                 Arranging backup instructors across 40+ campuses — raised, allocated, delivered, and settled with full accountability.
