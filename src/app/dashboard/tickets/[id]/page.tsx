@@ -48,6 +48,36 @@ export default async function TicketDetailPage({
     supabase.rpc("list_capability_managers"),
   ]);
 
+  // Smart-assign data: each pool instructor's active load + date clash with THIS
+  // ticket's dates (prevents double-booking a backup already committed elsewhere).
+  type PoolRow = { id: string; instructor_name: string; emp_id: string | null; availability_mode: string; current_status: string };
+  const poolRows = (pool ?? []) as PoolRow[];
+  let enrichedPool: (PoolRow & { load: number; busy: boolean })[] = poolRows.map((p) => ({ ...p, load: 0, busy: false }));
+  if (poolRows.length) {
+    const ACTIVE = ["backup_assigned", "confirmed", "session_done", "invoice_pending", "ops_approved", "hod_approved"];
+    const { data: assigns } = await supabase
+      .from("tickets")
+      .select("assigned_backup_id, absent_from, absent_to")
+      .in("assigned_backup_id", poolRows.map((p) => p.id))
+      .in("status", ACTIVE)
+      .neq("id", ticket.id);
+    const loadMap = new Map<string, number>();
+    const clashMap = new Map<string, boolean>();
+    const af = ticket.absent_from as string | null;
+    const at = (ticket.absent_to ?? ticket.absent_from) as string | null;
+    for (const a of (assigns ?? []) as { assigned_backup_id: string | null; absent_from: string | null; absent_to: string | null }[]) {
+      const bid = a.assigned_backup_id;
+      if (!bid) continue;
+      loadMap.set(bid, (loadMap.get(bid) ?? 0) + 1);
+      if (af && a.absent_from) {
+        const bf = a.absent_from;
+        const bt = a.absent_to ?? a.absent_from;
+        if (af <= (bt ?? af) && bf <= (at ?? af)) clashMap.set(bid, true);
+      }
+    }
+    enrichedPool = poolRows.map((p) => ({ ...p, load: loadMap.get(p.id) ?? 0, busy: clashMap.get(p.id) ?? false }));
+  }
+
   const status = ticket.status as TicketStatus;
   const mode = ticket.mode as TicketMode;
   const meta = STATUS_META[status];
@@ -328,7 +358,7 @@ export default async function TicketDetailPage({
                 ticketId={ticket.id}
                 status={status}
                 mode={mode}
-                pool={(pool ?? []) as never}
+                pool={enrichedPool as never}
                 perms={perms}
                 capabilityId={ticket.capability_id ?? null}
               />

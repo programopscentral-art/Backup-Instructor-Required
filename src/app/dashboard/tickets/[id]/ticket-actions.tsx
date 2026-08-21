@@ -11,6 +11,17 @@ interface PoolItem {
   emp_id: string | null;
   availability_mode: string;
   current_status: string;
+  load?: number;
+  busy?: boolean; // date clash with this ticket's dates
+}
+
+/** Availability tag + sort rank for a pool instructor (best pick first). */
+function poolTag(p: PoolItem): { text: string; rank: number } {
+  if (p.busy) return { text: "⚠ busy — date clash", rank: 3 };
+  if (p.current_status === "on_leave") return { text: "on leave", rank: 4 };
+  const load = p.load ?? 0;
+  if (load > 0) return { text: `${load} active`, rank: load >= 3 ? 2 : 1 };
+  return { text: "free", rank: 0 };
 }
 interface Perms {
   canAssign: boolean;
@@ -198,23 +209,39 @@ function AssignForm({
             {poolErr && <p className="text-xs text-[color:var(--rose)]">{poolErr}</p>}
           </div>
         ) : localPool.length > 0 ? (
-          <select
-            name="assigned_backup_id"
-            className="select"
-            onChange={(e) => {
-              const opt = e.target.selectedOptions[0];
-              const hidden = e.currentTarget.form?.elements.namedItem("assigned_backup_name") as HTMLInputElement | null;
-              if (hidden) hidden.value = opt?.dataset.name ?? "";
-            }}
-          >
-            <option value="">Select…</option>
-            {localPool.map((p) => (
-              <option key={p.id} value={p.id} data-name={p.instructor_name}>
-                {p.instructor_name}
-                {p.emp_id ? ` (${p.emp_id})` : ""} · {p.availability_mode} · {p.current_status}
-              </option>
-            ))}
-          </select>
+          <>
+            <select
+              name="assigned_backup_id"
+              className="select"
+              onChange={(e) => {
+                const opt = e.target.selectedOptions[0];
+                const hidden = e.currentTarget.form?.elements.namedItem("assigned_backup_name") as HTMLInputElement | null;
+                if (hidden) hidden.value = opt?.dataset.name ?? "";
+              }}
+            >
+              <option value="">Select…</option>
+              {[...localPool]
+                .sort((a, b) => {
+                  const ra = poolTag(a).rank;
+                  const rb = poolTag(b).rank;
+                  if (ra !== rb) return ra - rb;
+                  return (a.load ?? 0) - (b.load ?? 0);
+                })
+                .map((p) => {
+                  const tag = poolTag(p);
+                  return (
+                    <option key={p.id} value={p.id} data-name={p.instructor_name}>
+                      {tag.rank === 0 ? "✓ " : tag.rank >= 3 ? "⚠ " : ""}
+                      {p.instructor_name}
+                      {p.emp_id ? ` (${p.emp_id})` : ""} · {p.availability_mode} · {tag.text}
+                    </option>
+                  );
+                })}
+            </select>
+            <p className="mt-1.5 text-xs text-[color:var(--faint)]">
+              Sorted best-first · <span className="font-semibold text-[color:var(--rose)]">⚠ busy</span> = already booked for these dates · <span className="font-semibold">N active</span> = current load
+            </p>
+          </>
         ) : (
           <p className="rounded-lg border border-[#f6cdd6] bg-[#fdeef1] px-3 py-2 text-sm text-[color:var(--rose)]">
             No backups in this capability&apos;s pool yet. Use &ldquo;+ Add to pool&rdquo;, or type a name below.

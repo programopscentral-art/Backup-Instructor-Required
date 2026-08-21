@@ -22,6 +22,7 @@ import {
   History,
   CalendarClock,
   BarChart3,
+  Inbox,
   type LucideIcon,
 } from "lucide-react";
 import type { CSSProperties } from "react";
@@ -64,6 +65,7 @@ const GROUPS: Group[] = [
       { href: "/dashboard/backup-pool", label: "Backup Pool", icon: LifeBuoy, allow: CAP },
     ],
   },
+  { label: "My Capability", href: "/dashboard/my-capability", icon: Inbox, allow: CAP },
   {
     label: "Operations",
     items: [
