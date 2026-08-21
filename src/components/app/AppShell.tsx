@@ -359,9 +359,9 @@ function Brand() {
         priority
         className="h-9 w-auto"
       />
-      <span className="hidden items-center gap-2.5 sm:flex">
-        <span className="h-6 w-px bg-[color:var(--line-2)]" />
-        <span className="font-[family-name:var(--font-display)] text-sm font-bold text-[color:var(--accent)]">
+      <span className="flex items-center gap-2 sm:gap-2.5">
+        <span className="h-5 w-px bg-[color:var(--line-2)] sm:h-6" />
+        <span className="whitespace-nowrap font-[family-name:var(--font-display)] text-[13px] font-bold text-[color:var(--accent)] sm:text-sm">
           Backup OS
         </span>
       </span>
