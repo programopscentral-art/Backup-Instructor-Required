@@ -1,7 +1,7 @@
 import Link from "next/link";
+import Image from "next/image";
 import type { CSSProperties } from "react";
 import { ArrowUpRight, ShieldCheck } from "lucide-react";
-import { NiatLogo } from "@/components/ui/NiatLogo";
 
 const PLATFORM: [string, string][] = [
   ["Dashboard", "/dashboard"],
@@ -44,23 +44,19 @@ export function Footer() {
           <div className="grid gap-10 md:grid-cols-[1.6fr_1fr_1fr]">
             {/* Brand */}
             <div>
-              <div className="flex items-center gap-3">
-                <span className="grid place-items-center rounded-2xl bg-white p-2 shadow-lg">
-                  <NiatLogo size={42} />
-                </span>
-                <div>
-                  <p className="font-[family-name:var(--font-display)] text-2xl font-black tracking-tight">NIAT</p>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/70">
-                    Backup Instructor Platform
-                  </p>
-                </div>
+              <div className="inline-flex items-center rounded-2xl bg-white p-3 shadow-lg">
+                <Image
+                  src="/niat-logo.png"
+                  alt="NIAT — NxtWave of Innovation in Advanced Technologies"
+                  width={230}
+                  height={54}
+                  className="h-12 w-auto"
+                />
               </div>
-              <p className="mt-5 max-w-md font-[family-name:var(--font-display)] text-xl font-bold leading-tight sm:text-2xl">
-                <span className="animate-pulse bg-gradient-to-r from-white via-amber-100 to-white/50 bg-clip-text text-transparent">
-                  NxtWave of Innovation in Advanced Technologies
-                </span>
+              <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/70">
+                Backup Instructor Platform
               </p>
-              <p className="mt-3 max-w-sm text-sm leading-relaxed text-white/60">
+              <p className="mt-2 max-w-sm text-sm leading-relaxed text-white/60">
                 Arranging backup instructors across 40+ campuses — raised, allocated, delivered, and settled with full accountability.
               </p>
             </div>

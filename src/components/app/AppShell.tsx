@@ -25,10 +25,10 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { CSSProperties } from "react";
+import Image from "next/image";
 import { signOut } from "@/lib/auth/actions";
 import { NotificationBell } from "./NotificationBell";
 import { Footer } from "./Footer";
-import { NiatLogo } from "@/components/ui/NiatLogo";
 import { Spotlight } from "@/components/ui/Spotlight";
 import { themeFor } from "@/lib/theme/role-theme";
 import type { AppRole } from "@/lib/auth/roles";
@@ -139,7 +139,7 @@ export function AppShell({
       <header className="sticky top-0 z-40 border-b border-[color:var(--line)] bg-white/80 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-5 sm:px-8" ref={navRef}>
           <div className="flex items-center gap-8">
-            <Brand team={theme.team} />
+            <Brand />
             {/* Desktop nav */}
             <nav className="hidden items-center gap-1 lg:flex">
               {groups.map((g) => {
@@ -284,7 +284,7 @@ export function AppShell({
               className="fixed inset-y-0 right-0 z-50 flex w-72 flex-col bg-white px-4 py-5 shadow-2xl lg:hidden"
             >
               <div className="mb-4 flex items-center justify-between">
-                <Brand team={theme.team} />
+                <Brand />
                 <button onClick={() => setMobile(false)} className="btn btn-ghost btn-sm">
                   <X size={18} />
                 </button>
@@ -348,20 +348,17 @@ function ActiveBg() {
   );
 }
 
-function Brand({ team = "Program Ops" }: { team?: string }) {
+function Brand() {
   return (
-    <Link href="/dashboard" className="group flex items-center gap-2.5">
-      <span className="transition-transform group-hover:scale-105">
-        <NiatLogo size={34} />
-      </span>
-      <span className="leading-tight">
-        <span className="block font-[family-name:var(--font-display)] text-sm font-bold text-[color:var(--ink)]">
-          Backup Instructor
-        </span>
-        <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--accent)]">
-          NIAT · {team}
-        </span>
-      </span>
+    <Link href="/dashboard" className="flex items-center transition-transform hover:scale-[1.02]">
+      <Image
+        src="/niat-logo.png"
+        alt="NIAT — NxtWave of Innovation in Advanced Technologies"
+        width={148}
+        height={35}
+        priority
+        className="h-9 w-auto"
+      />
     </Link>
   );
 }
