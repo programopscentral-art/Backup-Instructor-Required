@@ -27,6 +27,8 @@ import {
 import type { CSSProperties } from "react";
 import { signOut } from "@/lib/auth/actions";
 import { NotificationBell } from "./NotificationBell";
+import { Footer } from "./Footer";
+import { NiatLogo } from "@/components/ui/NiatLogo";
 import { Spotlight } from "@/components/ui/Spotlight";
 import { themeFor } from "@/lib/theme/role-theme";
 import type { AppRole } from "@/lib/auth/roles";
@@ -330,6 +332,7 @@ export function AppShell({
       </AnimatePresence>
 
       <main className="mx-auto max-w-7xl px-5 py-8 sm:px-8">{children}</main>
+      <Footer />
     </div>
   );
 }
@@ -348,8 +351,8 @@ function ActiveBg() {
 function Brand({ team = "Program Ops" }: { team?: string }) {
   return (
     <Link href="/dashboard" className="group flex items-center gap-2.5">
-      <span className="grid h-9 w-9 place-items-center rounded-xl bg-[color:var(--accent)] text-white shadow-[0_6px_18px_-6px_rgba(var(--accent-rgb),0.7)] transition-transform group-hover:scale-105">
-        <span className="font-[family-name:var(--font-display)] text-lg font-black">N</span>
+      <span className="transition-transform group-hover:scale-105">
+        <NiatLogo size={34} />
       </span>
       <span className="leading-tight">
         <span className="block font-[family-name:var(--font-display)] text-sm font-bold text-[color:var(--ink)]">
