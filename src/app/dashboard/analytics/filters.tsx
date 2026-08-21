@@ -2,7 +2,7 @@
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useCallback } from "react";
-import { X } from "lucide-react";
+import { X, Download } from "lucide-react";
 
 const GRANS: [string, string][] = [
   ["day", "Day"],
@@ -35,6 +35,13 @@ export function AnalyticsFilters({
   );
 
   const hasFilters = current.from || current.to || current.university;
+
+  // CSV export honours the current date/university filters (not granularity).
+  const exportParams = new URLSearchParams();
+  if (current.from) exportParams.set("from", current.from);
+  if (current.to) exportParams.set("to", current.to);
+  if (current.university) exportParams.set("university", current.university);
+  const exportHref = `/dashboard/analytics/export${exportParams.toString() ? `?${exportParams}` : ""}`;
 
   return (
     <div className="card mb-6 flex flex-wrap items-end gap-4 p-4">
@@ -116,6 +123,10 @@ export function AnalyticsFilters({
           <X size={14} /> Clear
         </button>
       )}
+
+      <a href={exportHref} className="btn btn-primary btn-sm mb-0.5 ml-auto gap-1.5" download>
+        <Download size={14} /> Export CSV
+      </a>
     </div>
   );
 }

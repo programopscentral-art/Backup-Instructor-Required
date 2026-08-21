@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { Ticket, FolderOpen, CheckCircle2, MapPin, AlertTriangle } from "lucide-react";
+import { Ticket, FolderOpen, CheckCircle2, MapPin, AlertTriangle, Timer, UserCog } from "lucide-react";
 import { getSessionContext } from "@/lib/auth/session";
 import { createAuthedClient } from "@/lib/supabase/server";
 import { isAdminLike } from "@/lib/auth/roles";
@@ -44,6 +44,7 @@ function bucketOf(iso: string, gran: Gran): { key: string; label: string } {
 }
 
 interface Row {
+  id: string;
   status: TicketStatus;
   mode: TicketMode;
   reason_category: string | null;
@@ -51,6 +52,7 @@ interface Row {
   created_at: string;
   red_flag: boolean | null;
   universities: { name: string } | null;
+  capabilities: { name: string; manager_name: string | null } | null;
 }
 
 export default async function AnalyticsPage({
@@ -75,7 +77,7 @@ export default async function AnalyticsPage({
   const supabase = await createAuthedClient();
   let query = supabase
     .from("tickets")
-    .select("status, mode, reason_category, university_id, created_at, red_flag, universities(name)");
+    .select("id, status, mode, reason_category, university_id, created_at, red_flag, universities(name), capabilities(name, manager_name)");
   if (from) query = query.gte("created_at", from);
   if (to) query = query.lte("created_at", `${to}T23:59:59`);
   if (university) query = query.eq("university_id", university);
@@ -104,19 +106,54 @@ export default async function AnalyticsPage({
   const byStatus = countBy((r) => r.status);
   const byReason = countBy((r) => (r.reason_category as string | null) ?? null);
   const byUniversity = countBy((r) => r.universities?.name ?? null);
+  const byCM = countBy((r) => r.capabilities?.manager_name ?? null);
 
-  // Time series (chronological)
-  const tsMap = new Map<string, { label: string; count: number }>();
+  // Time series (chronological) with online/offline split.
+  const tsMap = new Map<string, { label: string; offline: number; online: number; other: number }>();
   for (const r of rows) {
     const b = bucketOf(r.created_at, granularity);
-    const cur = tsMap.get(b.key);
-    if (cur) cur.count += 1;
-    else tsMap.set(b.key, { label: b.label, count: 1 });
+    let cur = tsMap.get(b.key);
+    if (!cur) {
+      cur = { label: b.label, offline: 0, online: 0, other: 0 };
+      tsMap.set(b.key, cur);
+    }
+    if (r.mode === "offline") cur.offline += 1;
+    else if (r.mode === "online") cur.online += 1;
+    else cur.other += 1;
   }
   const series = [...tsMap.entries()]
     .sort((a, b) => a[0].localeCompare(b[0]))
     .slice(-24)
     .map(([, v]) => v);
+
+  // Average time-to-close (days) — from the ticket's "closed" event.
+  const closedIds = rows.filter((r) => r.status === "closed").map((r) => r.id);
+  let avgDaysToClose = 0;
+  let closedMeasured = 0;
+  if (closedIds.length) {
+    const { data: evs } = await supabase
+      .from("ticket_events")
+      .select("ticket_id, created_at")
+      .eq("to_status", "closed")
+      .in("ticket_id", closedIds);
+    const closedAt = new Map<string, string>();
+    for (const e of (evs ?? []) as { ticket_id: string; created_at: string }[]) {
+      const cur = closedAt.get(e.ticket_id);
+      if (!cur || e.created_at < cur) closedAt.set(e.ticket_id, e.created_at);
+    }
+    let totalDays = 0;
+    for (const r of rows) {
+      if (r.status !== "closed") continue;
+      const ca = closedAt.get(r.id);
+      if (!ca) continue;
+      const days = (new Date(ca).getTime() - new Date(r.created_at).getTime()) / 86_400_000;
+      if (days >= 0) {
+        totalDays += days;
+        closedMeasured += 1;
+      }
+    }
+    avgDaysToClose = closedMeasured ? totalDays / closedMeasured : 0;
+  }
 
   const statusItems = (Object.keys(STATUS_META) as TicketStatus[])
     .map((s) => ({ label: STATUS_META[s].label, value: byStatus.get(s) ?? 0 }))
@@ -129,6 +166,16 @@ export default async function AnalyticsPage({
     .map(([label, value]) => ({ label, value }))
     .sort((a, b) => b.value - a.value)
     .slice(0, 10);
+  const cmItems = [...byCM.entries()]
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 10);
+  const avgCloseLabel =
+    closedMeasured > 0
+      ? avgDaysToClose >= 1
+        ? `${avgDaysToClose.toFixed(1)}d`
+        : `${Math.round(avgDaysToClose * 24)}h`
+      : "—";
 
   const refs = adminLike ? await getRefs() : null;
   const scopeLabel = adminLike
@@ -155,22 +202,34 @@ export default async function AnalyticsPage({
 
       {/* KPIs */}
       <FadeIn delay={0.05}>
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
           <StatCard label="Total tickets" value={total} icon={<Ticket size={20} />} accent="accent" />
           <StatCard label="Open" value={open} icon={<FolderOpen size={20} />} accent="blue" />
           <StatCard label="Closed" value={closed} icon={<CheckCircle2 size={20} />} accent="emerald" />
           <StatCard label="Offline" value={offline} icon={<MapPin size={20} />} accent="violet" hint={`${online} online`} />
           <StatCard label="Red flags" value={redFlags} icon={<AlertTriangle size={20} />} accent="rose" />
+          <MetricCard
+            label="Avg time to close"
+            value={avgCloseLabel}
+            hint={closedMeasured > 0 ? `${closedMeasured} closed` : undefined}
+          />
         </div>
       </FadeIn>
 
-      {/* Time series */}
+      {/* Time series with online/offline split */}
       <FadeIn delay={0.1} className="mt-6">
         <div className="card p-6">
-          <h2 className="mb-1 font-[family-name:var(--font-display)] text-base font-bold">
-            Tickets over time
-          </h2>
-          <p className="mb-5 text-xs text-[color:var(--muted)]">Raised per {granularity}</p>
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-[family-name:var(--font-display)] text-base font-bold">Tickets over time</h2>
+              <p className="mt-0.5 text-xs text-[color:var(--muted)]">Raised per {granularity} · online vs offline</p>
+            </div>
+            <div className="flex items-center gap-4 text-xs text-[color:var(--muted)]">
+              <Legend color={MODE_COLORS.offline} label="Offline" />
+              <Legend color={MODE_COLORS.online} label="Online" />
+              <Legend color={MODE_COLORS.other} label="Undecided" />
+            </div>
+          </div>
           <TimeBars series={series} />
         </div>
       </FadeIn>
@@ -189,19 +248,69 @@ export default async function AnalyticsPage({
             <BarList items={reasonItems} total={total} />
           </div>
         </FadeIn>
-      </div>
-
-      {/* University breakdown — admin only */}
-      {adminLike && (
-        <FadeIn delay={0.25} className="mt-6">
+        <FadeIn delay={0.25}>
           <div className="card p-6">
-            <h2 className="mb-5 font-[family-name:var(--font-display)] text-base font-bold">
-              By university {university && <span className="pill pill-muted">filtered</span>}
+            <h2 className="mb-1 flex items-center gap-2 font-[family-name:var(--font-display)] text-base font-bold">
+              <UserCog size={16} className="text-[color:var(--accent)]" /> CM workload
             </h2>
-            <BarList items={uniItems} total={total} />
+            <p className="mb-5 text-xs text-[color:var(--muted)]">Tickets per Capability Manager</p>
+            <BarList items={cmItems} total={total} />
           </div>
         </FadeIn>
-      )}
+        {adminLike && (
+          <FadeIn delay={0.3}>
+            <div className="card p-6">
+              <h2 className="mb-5 flex items-center gap-2 font-[family-name:var(--font-display)] text-base font-bold">
+                By university {university && <span className="pill pill-muted">filtered</span>}
+              </h2>
+              <BarList items={uniItems} total={total} />
+            </div>
+          </FadeIn>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const MODE_COLORS = {
+  offline: "rgb(109,40,217)",
+  online: "rgb(4,120,87)",
+  other: "rgb(148,163,184)",
+};
+
+function Legend({ color, label }: { color: string; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: color }} />
+      {label}
+    </span>
+  );
+}
+
+/** StatCard variant that shows a text value (e.g. "2.5d"). */
+function MetricCard({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  const rgb = "180,83,9";
+  return (
+    <div className="card card-hover relative overflow-hidden p-5" style={{ ["--rgb" as string]: rgb }}>
+      <div
+        className="pointer-events-none absolute -right-8 -top-8 h-28 w-28 rounded-full blur-2xl"
+        style={{ background: `rgba(${rgb},0.18)` }}
+      />
+      <div className="flex items-start justify-between">
+        <div
+          className="grid h-11 w-11 place-items-center rounded-xl"
+          style={{ background: `rgba(${rgb},0.14)`, color: `rgb(${rgb})` }}
+        >
+          <Timer size={20} />
+        </div>
+        {hint && <span className="pill pill-muted">{hint}</span>}
+      </div>
+      <div className="mt-4">
+        <div className="font-[family-name:var(--font-display)] text-3xl font-bold tracking-tight" style={{ color: "var(--ink)" }}>
+          {value}
+        </div>
+        <div className="mt-1 text-sm text-[color:var(--muted)]">{label}</div>
+      </div>
     </div>
   );
 }
@@ -237,25 +346,30 @@ function BarList({ items, total }: { items: { label: string; value: number }[]; 
   );
 }
 
-/** Vertical time-series bars. */
-function TimeBars({ series }: { series: { label: string; count: number }[] }) {
+/** Vertical time-series bars, stacked by mode (offline / online / undecided). */
+function TimeBars({ series }: { series: { label: string; offline: number; online: number; other: number }[] }) {
   if (series.length === 0) return <p className="text-sm text-[color:var(--faint)]">No data for this range.</p>;
-  const max = Math.max(...series.map((s) => s.count), 1);
+  const totals = series.map((s) => s.offline + s.online + s.other);
+  const max = Math.max(...totals, 1);
   return (
     <div className="flex items-end gap-2 overflow-x-auto pb-1" style={{ height: 200 }}>
-      {series.map((s, i) => (
-        <div key={i} className="flex min-w-[28px] flex-1 flex-col items-center gap-1.5">
-          <span className="text-xs font-semibold text-[color:var(--ink)]">{s.count}</span>
-          <div className="flex w-full flex-1 items-end">
-            <div
-              className="w-full rounded-t-md transition-all"
-              style={{ height: `${(s.count / max) * 100}%`, minHeight: 4, background: "var(--accent)" }}
-              title={`${s.label}: ${s.count}`}
-            />
+      {series.map((s, i) => {
+        const t = totals[i];
+        const seg = (v: number) => (t > 0 ? (v / t) * (t / max) * 100 : 0);
+        return (
+          <div key={i} className="flex min-w-[28px] flex-1 flex-col items-center gap-1.5">
+            <span className="text-xs font-semibold text-[color:var(--ink)]">{t}</span>
+            <div className="flex w-full flex-1 flex-col justify-end" title={`${s.label}: ${t} (offline ${s.offline}, online ${s.online})`}>
+              {s.other > 0 && <div className="w-full" style={{ height: `${seg(s.other)}%`, background: MODE_COLORS.other }} />}
+              {s.online > 0 && <div className="w-full" style={{ height: `${seg(s.online)}%`, background: MODE_COLORS.online }} />}
+              {s.offline > 0 && (
+                <div className="w-full rounded-b-md" style={{ height: `${seg(s.offline)}%`, background: MODE_COLORS.offline }} />
+              )}
+            </div>
+            <span className="whitespace-nowrap text-[10px] text-[color:var(--faint)]">{s.label}</span>
           </div>
-          <span className="whitespace-nowrap text-[10px] text-[color:var(--faint)]">{s.label}</span>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
