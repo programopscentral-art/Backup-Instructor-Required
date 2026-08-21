@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 
@@ -7,9 +7,21 @@ const sans = Inter({
   subsets: ["latin"],
 });
 
+export const viewport: Viewport = {
+  themeColor: "#7A0016",
+};
+
 export const metadata: Metadata = {
-  title: "NIAT · Backup OS",
+  metadataBase: new URL("https://backup-instructor-required.vercel.app"),
+  applicationName: "Backup OS",
+  title: { default: "NIAT · Backup OS", template: "%s · Backup OS" },
   description: "Backup OS — arrange, deliver, and settle backup instructors across NIAT campuses.",
+  openGraph: {
+    title: "NIAT · Backup OS",
+    description: "Backup OS — arrange, deliver, and settle backup instructors across NIAT campuses.",
+    siteName: "Backup OS",
+    type: "website",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
