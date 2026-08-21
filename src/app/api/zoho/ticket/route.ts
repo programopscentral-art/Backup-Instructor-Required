@@ -44,6 +44,8 @@ const UNI_STOPWORDS = new Set([
   "deemed", "the", "of", "and", "college", "institute", "institutes", "institution",
   "technology", "technologies", "campus", "school", "for", "advanced", "studies",
   "niat", "nxtwave",
+  // Common filler words that appear in official names ("… deemed to be university").
+  "to", "be", "is", "at", "in", "an", "by", "on", "or", "as", "a",
 ]);
 /** Distinctive lowercase tokens of a university name (fillers + short bits dropped). */
 function uniTokens(s: string): Set<string> {
@@ -160,6 +162,19 @@ export async function POST(req: Request) {
   const timeTo = str(body.time_to) || null;
   const mode = normMode(str(body.mode));
   const raiserEmail = str(body.raised_by_email).toLowerCase() || null;
+  // Raiser snapshot from Zoho Staff Profiles (name + full profile details).
+  const raiserName = str(body.raised_by_name) || null;
+  let raiserDetails: Record<string, unknown> | null = null;
+  const rbd = body.raised_by_details;
+  if (rbd && typeof rbd === "object" && !Array.isArray(rbd)) {
+    raiserDetails = rbd as Record<string, unknown>;
+  } else if (typeof rbd === "string" && rbd.trim().startsWith("{")) {
+    try {
+      raiserDetails = JSON.parse(rbd);
+    } catch {
+      raiserDetails = null;
+    }
+  }
   // "Notify Capability Managers" — array (Zoho multi-select) or comma string of emails.
   const notifyCms: string[] = Array.isArray(body.notify_cms)
     ? (body.notify_cms as unknown[]).map((x) => str(x)).filter(Boolean)
@@ -246,6 +261,8 @@ export async function POST(req: Request) {
       requested_mode: mode,
       raised_by: raisedBy,
       raised_by_email: raiserEmail,
+      raised_by_name: raiserName,
+      raised_by_details: raiserDetails,
       status: "raised",
     })
     .select("id, ticket_no, universities(name), subjects(name)")
@@ -264,7 +281,7 @@ export async function POST(req: Request) {
 
   await db.from("ticket_events").insert({
     ticket_id: ticket.id,
-    actor_name: raiserEmail || "Zoho",
+    actor_name: raiserName || raiserEmail || "Zoho",
     from_status: "raised",
     to_status: "raised",
     note: `Raised via Zoho${universityId ? "" : " — university not matched (needs admin)"}${capabilityId ? "" : "; subject has no Capability Manager"}.`,

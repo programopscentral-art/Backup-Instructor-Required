@@ -135,6 +135,28 @@ export default async function TicketDetailPage({
     ["Assigned backup", ticket.assigned_backup_name],
   ];
 
+  // Raiser snapshot (captured from Zoho Staff Profiles at raise time).
+  const rd = (ticket.raised_by_details ?? null) as Record<string, unknown> | null;
+  const raiserRows: [string, string][] = [];
+  if (ticket.raised_by_name) raiserRows.push(["Name", String(ticket.raised_by_name)]);
+  if (ticket.raised_by_email) raiserRows.push(["Email", String(ticket.raised_by_email)]);
+  const RAISER_LABELS: [string, string][] = [
+    ["emp_id", "Employee ID"],
+    ["role", "Role"],
+    ["department", "Department"],
+    ["campus", "Campus"],
+    ["work_location", "Work location"],
+    ["cos_of_campus", "COS of campus"],
+    ["reporting_manager", "Reporting manager"],
+  ];
+  if (rd) {
+    for (const [key, label] of RAISER_LABELS) {
+      const v = rd[key];
+      if (v != null && String(v).trim() !== "") raiserRows.push([label, String(v)]);
+    }
+  }
+  const showRaiser = raiserRows.length > 0;
+
   return (
     <div>
       <Link
@@ -224,6 +246,27 @@ export default async function TicketDetailPage({
               </dl>
             </div>
           </FadeIn>
+
+          {showRaiser && (
+            <FadeIn delay={0.12}>
+              <div className="card p-6">
+                <h2 className="mb-4 flex items-center gap-2 font-[family-name:var(--font-display)] text-base font-bold">
+                  Raised by
+                  {ticket.source === "zoho" && <span className="pill pill-muted">via Zoho</span>}
+                </h2>
+                <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+                  {raiserRows.map(([k, v]) => (
+                    <div key={k}>
+                      <dt className="text-xs font-semibold uppercase tracking-wide text-[color:var(--faint)]">
+                        {k}
+                      </dt>
+                      <dd className="mt-0.5 text-sm text-[color:var(--ink)]">{v}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            </FadeIn>
+          )}
 
           <FadeIn delay={0.15}>
             <div className="card p-6">
