@@ -21,6 +21,7 @@ import {
   LogOut,
   History,
   CalendarClock,
+  BarChart3,
   type LucideIcon,
 } from "lucide-react";
 import type { CSSProperties } from "react";
@@ -43,6 +44,7 @@ interface Group {
   icon?: LucideIcon;
   items?: Item[];
   adminOnly?: boolean;
+  allow?: AppRole[]; // for href groups: restrict who sees it (admin/hod always do)
 }
 
 const STAFF = ["university_staff"] as AppRole[];
@@ -69,6 +71,7 @@ const GROUPS: Group[] = [
       { href: "/dashboard/invoices", label: "Invoices", icon: ReceiptText, allow: [] },
     ],
   },
+  { label: "Analytics", href: "/dashboard/analytics", icon: BarChart3, allow: STAFF },
   { label: "Logs", href: "/dashboard/logs", icon: History },
   { label: "Access", href: "/dashboard/access", icon: ShieldCheck, adminOnly: true },
 ];
@@ -101,6 +104,7 @@ export function AppShell({
 
   const itemVisible = (it: Item) => adminLike || !it.allow || it.allow.some((r) => roles.includes(r));
   const groups = GROUPS.filter((g) => !g.adminOnly || adminLike)
+    .filter((g) => !g.allow || adminLike || g.allow.some((r) => roles.includes(r)))
     .map((g) => (g.items ? { ...g, items: g.items.filter(itemVisible) } : g))
     .filter((g) => g.href || (g.items && g.items.length > 0));
 
