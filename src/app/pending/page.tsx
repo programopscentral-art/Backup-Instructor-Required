@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { Clock } from "lucide-react";
 import { getSessionContext } from "@/lib/auth/session";
 import { SignOutButton } from "@/components/sign-out-button";
+import { RecheckAccessButton } from "./recheck-button";
 import { FadeIn } from "@/components/ui/motion";
 
 export default async function PendingPage() {
@@ -25,10 +26,14 @@ export default async function PendingPage() {
             has been assigned yet. An Admin from Program Ops needs to grant you access.
           </p>
           <p className="mt-2 text-sm text-[color:var(--faint)]">
-            Once assigned, refresh and your dashboard appears automatically.
+            Already added to a directory (staff, instructor, capability, or backup pool)?
+            Click below to pull in your access instantly.
           </p>
-          <div className="mt-6 flex justify-center">
-            <SignOutButton />
+          <div className="mt-6 space-y-3">
+            <RecheckAccessButton />
+            <div className="flex justify-center">
+              <SignOutButton />
+            </div>
           </div>
         </div>
       </FadeIn>
