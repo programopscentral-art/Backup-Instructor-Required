@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 type SB = SupabaseClient;
 
@@ -11,14 +12,24 @@ interface NotifyArgs {
   ticketId?: string | null;
 }
 
+/** Escape user-supplied text before embedding it in the email HTML template. */
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string,
+  );
+}
+
 /**
  * Records an in-app notification and, when Google Workspace SMTP is configured
  * (GMAIL_USER + GMAIL_APP_PASSWORD), sends the email from your @nxtwave.in
  * mailbox too. Safe to call from server actions — never throws.
  */
-export async function notify(supabase: SB, args: NotifyArgs) {
+export async function notify(_supabase: SB, args: NotifyArgs) {
   try {
-    await supabase.from("notifications").insert({
+    // Written via the service-role client so the notifications_insert RLS policy
+    // can stay locked to admin/HOD (blocks user-forged notifications) while the
+    // app still delivers to any recipient exactly as before.
+    await createAdminClient().from("notifications").insert({
       recipient_user_id: args.recipientUserId ?? null,
       recipient_email: args.recipientEmail ?? null,
       type: args.type,
@@ -52,8 +63,8 @@ export async function notify(supabase: SB, args: NotifyArgs) {
           <strong style="font-size:15px">NIAT · Backup OS</strong>
         </div>
         <div style="border:1px solid #eee;border-top:none;padding:20px;border-radius:0 0 12px 12px">
-          <h2 style="margin:0 0 8px;font-size:18px;color:#991b1b">${args.title}</h2>
-          <p style="margin:0;line-height:1.6">${args.body}</p>
+          <h2 style="margin:0 0 8px;font-size:18px;color:#991b1b">${escapeHtml(args.title)}</h2>
+          <p style="margin:0;line-height:1.6">${escapeHtml(args.body)}</p>
         </div>
         <p style="color:#94a3b8;font-size:12px;margin-top:12px">Program Ops · NxtWave / NIAT</p>
       </div>`,

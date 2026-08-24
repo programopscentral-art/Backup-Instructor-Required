@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { zohoSecretOk, likeEscape } from "@/lib/zoho/security";
 
 /**
  * Read-only options feed for Zoho Creator's dynamic dropdowns.
@@ -13,8 +14,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * Returns plain string arrays — the exact shape Zoho dropdowns want.
  */
 export async function GET(req: Request) {
-  const secret = req.headers.get("x-zoho-secret");
-  if (!process.env.ZOHO_WEBHOOK_SECRET || secret !== process.env.ZOHO_WEBHOOK_SECRET) {
+  if (!zohoSecretOk(req)) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
@@ -49,10 +49,10 @@ export async function GET(req: Request) {
     const email = (searchParams.get("email") || "").trim().toLowerCase();
     let universityId: string | null = null;
     if (uniRaw) {
-      const { data: byCode } = await db.from("universities").select("id").ilike("code", uniRaw).maybeSingle();
+      const { data: byCode } = await db.from("universities").select("id").ilike("code", likeEscape(uniRaw)).maybeSingle();
       universityId = byCode?.id ?? null;
       if (!universityId) {
-        const { data: byName } = await db.from("universities").select("id").ilike("name", `%${uniRaw}%`).limit(1);
+        const { data: byName } = await db.from("universities").select("id").ilike("name", `%${likeEscape(uniRaw)}%`).limit(1);
         universityId = byName?.[0]?.id ?? null;
       }
     }

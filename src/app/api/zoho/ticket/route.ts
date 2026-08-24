@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notify } from "@/lib/notify";
+import { zohoSecretOk, likeEscape } from "@/lib/zoho/security";
 
 /**
  * Zoho Creator → NIAT webhook (READ-ONLY intake).
@@ -136,8 +137,7 @@ function resolveUniversityId(raw: string, rows: UniRow[]): string | null {
 }
 
 export async function POST(req: Request) {
-  const secret = req.headers.get("x-zoho-secret");
-  if (!process.env.ZOHO_WEBHOOK_SECRET || secret !== process.env.ZOHO_WEBHOOK_SECRET) {
+  if (!zohoSecretOk(req)) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
@@ -214,14 +214,14 @@ export async function POST(req: Request) {
     const { data: exactSubj } = await db
       .from("subjects")
       .select("id, capability_id")
-      .ilike("name", subjectRaw)
+      .ilike("name", likeEscape(subjectRaw))
       .limit(1);
     row = exactSubj?.[0];
     if (!row) {
       const { data: likeSubj } = await db
         .from("subjects")
         .select("id, capability_id")
-        .ilike("name", `%${subjectRaw}%`)
+        .ilike("name", `%${likeEscape(subjectRaw)}%`)
         .limit(1);
       row = likeSubj?.[0];
     }

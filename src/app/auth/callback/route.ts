@@ -10,7 +10,10 @@ import { isDomainAllowed } from "@/lib/auth/roles";
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/dashboard";
+  // Only allow same-site relative paths as the post-login destination — reject
+  // absolute URLs and protocol-relative "//host" to prevent an open redirect.
+  const nextRaw = searchParams.get("next") ?? "/dashboard";
+  const next = /^\/(?!\/)/.test(nextRaw) ? nextRaw : "/dashboard";
 
   if (!code) {
     return NextResponse.redirect(`${origin}/auth/auth-error?reason=nocode`);

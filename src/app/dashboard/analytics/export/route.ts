@@ -20,7 +20,10 @@ interface ExportRow {
 }
 
 const esc = (v: unknown) => {
-  const s = v == null ? "" : String(v);
+  let s = v == null ? "" : String(v);
+  // Neutralize spreadsheet formula injection: a cell starting with = + - @ (or a
+  // control char) is treated as a formula by Excel/Sheets. Prefix with a quote.
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 

@@ -31,6 +31,12 @@ export async function submitInvoice(_prev: InvoiceState, formData: FormData): Pr
   if (!isUrl(nxtclaim_link)) return { error: "Enter a valid NxtClaim URL (https://…)." };
   if (!description) return { error: "Add a short description." };
 
+  // Amount is optional, but if given it must be a real, non-negative number.
+  if (amountRaw) {
+    const amt = Number(amountRaw);
+    if (!Number.isFinite(amt) || amt < 0) return { error: "Enter a valid, non-negative amount." };
+  }
+
   let files: { path: string; name: string }[] = [];
   try {
     files = JSON.parse(filesJson);
@@ -38,6 +44,11 @@ export async function submitInvoice(_prev: InvoiceState, formData: FormData): Pr
     files = [];
   }
   if (files.length === 0) return { error: "Upload at least one charge slip / receipt." };
+  // Every uploaded file must live under this ticket's folder — don't let the
+  // client attach an arbitrary bucket path to the invoice.
+  if (!files.every((f) => typeof f?.path === "string" && f.path.startsWith(`${ticket_id}/`))) {
+    return { error: "Invalid file reference." };
+  }
 
   const supabase = await createAuthedClient();
 

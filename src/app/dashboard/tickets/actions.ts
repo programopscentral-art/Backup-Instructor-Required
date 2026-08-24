@@ -175,7 +175,7 @@ export async function transitionTicket(_prev: ActionState, formData: FormData): 
   const supabase = await createAuthedClient();
   const { data: ticket } = await supabase
     .from("tickets")
-    .select("id, status, mode")
+    .select("id, status, mode, capability_id")
     .eq("id", ticketId)
     .maybeSingle();
   if (!ticket) return { error: "Ticket not found." };
@@ -184,6 +184,16 @@ export async function transitionTicket(_prev: ActionState, formData: FormData): 
   // Reject illegal transitions (skip/reverse) regardless of what the client sends.
   if (!PRE[action]?.includes(from)) {
     return { error: `Can't do that from "${STATUS_META[from]?.label ?? from}".` };
+  }
+
+  // Explicit server-side authorization (defense-in-depth; RLS also enforces it):
+  // assigning is admin or a Capability Manager; every other transition is Ops/HOD.
+  const adminLike = isAdminLike(ctx.roles);
+  const isCM = ctx.roles.includes("capability_manager") || ctx.roles.includes("cma");
+  if (action === "assign") {
+    if (!adminLike && !isCM) return { error: "Not authorized to assign a backup." };
+  } else if (!adminLike) {
+    return { error: "Only Ops/HOD can perform this action." };
   }
   const actorName = ctx.profile?.full_name || ctx.email;
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
@@ -194,6 +204,19 @@ export async function transitionTicket(_prev: ActionState, formData: FormData): 
     const backupName = String(formData.get("assigned_backup_name") || "").trim();
     const mode = String(formData.get("mode") || "undecided");
     if (!backupName && !backupId) return { error: "Pick a backup instructor." };
+    // A pool-selected backup must belong to this ticket's capability (no cross-
+    // capability assignment via a crafted id).
+    if (backupId) {
+      const { data: bp } = await supabase
+        .from("backup_instructor_pool")
+        .select("capability_id")
+        .eq("id", backupId)
+        .maybeSingle();
+      if (!bp) return { error: "Selected backup not found." };
+      if (ticket.capability_id && bp.capability_id !== ticket.capability_id) {
+        return { error: "That backup belongs to a different capability." };
+      }
+    }
     to = "backup_assigned";
     update.assigned_backup_id = backupId;
     update.assigned_backup_name = backupName || null;

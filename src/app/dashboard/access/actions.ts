@@ -40,6 +40,9 @@ export async function grantAccess(
   if (!isDomainAllowed(email))
     return { error: "Email must be @nxtwave.in or @nxtwave.co.in." };
   if (!VALID_ROLES.includes(role)) return { error: "Pick a role." };
+  // Only a true Admin may grant the Admin role — stops an HOD self-escalating.
+  if (role === "admin" && !ctx.roles.includes("admin"))
+    return { error: "Only an Admin can grant the Admin role." };
 
   if (scopeType === "global") scopeId = null;
   if (scopeType !== "global" && !scopeId)
@@ -54,16 +57,24 @@ export async function grantAccess(
     .maybeSingle();
 
   if (profile?.id) {
+    // Anti-lockout / anti-self-escalation: an admin can't rewrite their own role.
+    if (profile.id === ctx.userId)
+      return { error: "You can't change your own role. Ask another admin." };
     // One person = one role. Granting a new role REPLACES any existing one
-    // (remove old access, give the new) — never accumulate a second role.
-    await supabase.from("role_assignments").delete().eq("user_id", profile.id);
-    const { error } = await supabase.from("role_assignments").insert({
-      user_id: profile.id,
-      role,
-      scope_type: scopeType,
-      scope_id: scopeId,
-      granted_by: ctx.userId,
-    });
+    // atomically (upsert on the unique user_id) — never a delete-then-insert
+    // window that could leave the user with zero roles.
+    const { error } = await supabase
+      .from("role_assignments")
+      .upsert(
+        {
+          user_id: profile.id,
+          role,
+          scope_type: scopeType,
+          scope_id: scopeId,
+          granted_by: ctx.userId,
+        },
+        { onConflict: "user_id" },
+      );
     if (error) return { error: error.message };
     await supabase.from("profiles").update({ status: "active" }).eq("id", profile.id);
     await audit(supabase, ctx, "grant_role", { email, role, scopeType, scopeId, detail: "Assigned to existing user (replaced any prior role)" });
@@ -127,6 +138,7 @@ export async function revokeAssignment(formData: FormData) {
     .maybeSingle();
   if (!a) return;
   if (a.user_id === ctx.userId) return; // never let an admin lock themselves out
+  if (a.role === "admin" && !ctx.roles.includes("admin")) return; // only admins touch admin roles
   await supabase.from("role_assignments").delete().eq("id", id);
   await audit(supabase, ctx, "revoke_role", {
     email: (a.profiles as unknown as { email: string } | null)?.email,
@@ -150,6 +162,7 @@ export async function deletePendingGrant(formData: FormData) {
     .select("email, role, scope_type, scope_id")
     .eq("id", id)
     .maybeSingle();
+  if (g?.role === "admin" && !ctx.roles.includes("admin")) return; // only admins touch admin grants
   await supabase.from("access_grants").delete().eq("id", id);
   if (g)
     await audit(supabase, ctx, "delete_grant", {
