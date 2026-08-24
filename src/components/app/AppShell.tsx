@@ -22,6 +22,7 @@ import {
   History,
   CalendarClock,
   BarChart3,
+  Stamp,
   type LucideIcon,
 } from "lucide-react";
 import type { CSSProperties } from "react";
@@ -73,6 +74,7 @@ const GROUPS: Group[] = [
     items: [
       { href: "/dashboard/tickets", label: "Tickets", icon: Ticket },
       { href: "/dashboard/invoices", label: "Invoices", icon: ReceiptText, allow: [] },
+      { href: "/dashboard/hod-approvals", label: "HOD Approvals", icon: Stamp, allow: [] },
     ],
   },
   { label: "Analytics", href: "/dashboard/analytics", icon: BarChart3, allow: STAFF },
