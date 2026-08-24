@@ -51,9 +51,11 @@ interface Group {
 
 const STAFF = ["university_staff"] as AppRole[];
 const CAP = ["capability_manager", "cma"] as AppRole[];
+const INSTR = ["instructor"] as AppRole[];
 
 const GROUPS: Group[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { label: "My Assignments", href: "/dashboard/my-assignments", icon: GraduationCap, allow: INSTR },
   {
     label: "Directories",
     items: [

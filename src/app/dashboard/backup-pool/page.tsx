@@ -35,12 +35,13 @@ export default async function BackupPoolPage() {
   const supabase = await createAuthedClient();
   const { data } = await supabase
     .from("backup_instructor_pool")
-    .select("id, instructor_name, emp_id, capability_id, availability_mode, current_status")
+    .select("id, instructor_name, emp_id, email, capability_id, availability_mode, current_status")
     .order("instructor_name");
 
   const columns: Column[] = [
     { key: "instructor_name", label: "Backup Instructor", required: true },
     { key: "emp_id", label: "Emp ID", pill: true },
+    { key: "email", label: "Email (for login)", placeholder: "name@nxtwave.in" },
     { key: "capability_id", label: "Capability", type: "select", required: true, options: capOptions },
     { key: "availability_mode", label: "Mode", type: "select", pill: true, options: [
       { value: "online", label: "Online" },
@@ -75,7 +76,7 @@ export default async function BackupPoolPage() {
             ...(!fullAccess && capIds.length === 1 ? { capability_id: capIds[0] } : {}),
           }}
           labelMaps={{ capability_id: refs.capabilities.map }}
-          searchKeys={["instructor_name", "emp_id"]}
+          searchKeys={["instructor_name", "emp_id", "email"]}
         />
       </FadeIn>
     </div>
