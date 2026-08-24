@@ -54,6 +54,9 @@ export async function grantAccess(
     .maybeSingle();
 
   if (profile?.id) {
+    // One person = one role. Granting a new role REPLACES any existing one
+    // (remove old access, give the new) — never accumulate a second role.
+    await supabase.from("role_assignments").delete().eq("user_id", profile.id);
     const { error } = await supabase.from("role_assignments").insert({
       user_id: profile.id,
       role,
@@ -61,13 +64,15 @@ export async function grantAccess(
       scope_id: scopeId,
       granted_by: ctx.userId,
     });
-    if (error && !/duplicate/i.test(error.message)) return { error: error.message };
+    if (error) return { error: error.message };
     await supabase.from("profiles").update({ status: "active" }).eq("id", profile.id);
-    await audit(supabase, ctx, "grant_role", { email, role, scopeType, scopeId, detail: "Assigned to existing user" });
+    await audit(supabase, ctx, "grant_role", { email, role, scopeType, scopeId, detail: "Assigned to existing user (replaced any prior role)" });
     revalidatePath("/dashboard/access");
-    return { ok: `Role assigned to ${email}. It applies on their next page load.` };
+    return { ok: `Role set to ${role} for ${email} (any previous role was removed). Applies on their next page load.` };
   }
 
+  // Pending pre-authorization: keep exactly one per email — replace any prior pending grant.
+  await supabase.from("access_grants").delete().ilike("email", email).is("applied_at", null);
   const { error } = await supabase.from("access_grants").insert({
     email,
     role,
