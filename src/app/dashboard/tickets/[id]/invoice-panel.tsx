@@ -31,12 +31,14 @@ export function InvoicePanel({
   ticketStatus,
   overdue,
   invoice,
+  canUpload,
   perms,
 }: {
   ticketId: string;
   ticketStatus: string;
   overdue: boolean;
   invoice: InvoiceView | null;
+  canUpload: boolean;
   perms: { isAdmin: boolean; isHod: boolean };
 }) {
   const router = useRouter();
@@ -48,23 +50,34 @@ export function InvoicePanel({
           <div className="flex items-start gap-2.5 rounded-xl border border-[#f6cdd6] bg-[#fdeef1] px-3.5 py-2.5 text-sm text-[color:var(--rose)]">
             <AlertTriangle size={17} className="mt-0.5 flex-none" />
             <span>
-              <strong>Red flag:</strong> the 24-hour window has passed with no invoice. Submit it now.
+              <strong>Red flag:</strong> the 24-hour window has passed with no invoice.
+              {canUpload ? " Submit it now." : " Awaiting the backup instructor."}
             </span>
           </div>
         )}
-        <SubmitForm ticketId={ticketId} onDone={() => router.refresh()} />
+        {canUpload ? (
+          <SubmitForm ticketId={ticketId} onDone={() => router.refresh()} />
+        ) : (
+          <WaitingForBackup />
+        )}
       </div>
     );
   }
 
-  // Returned for fix → let the submitter correct and re-file.
+  // Returned for fix → let the submitter (backup instructor / Ops) correct and re-file.
   if (invoice.status === "returned") {
     return (
       <div className="space-y-4">
         <div className="rounded-lg border border-[#f6cdd6] bg-[#fdeef1] px-3 py-2.5 text-sm text-[color:var(--rose)]">
           <strong>Returned:</strong> {invoice.return_reason ?? "Please correct the details and resubmit."}
         </div>
-        <SubmitForm ticketId={ticketId} onDone={() => router.refresh()} />
+        {canUpload ? (
+          <SubmitForm ticketId={ticketId} onDone={() => router.refresh()} />
+        ) : (
+          <p className="text-sm text-[color:var(--muted)]">
+            The backup instructor needs to correct and re-file this claim.
+          </p>
+        )}
       </div>
     );
   }
@@ -123,6 +136,21 @@ export function InvoicePanel({
         perms={perms}
         onDone={() => router.refresh()}
       />
+    </div>
+  );
+}
+
+/** Read-only note shown to anyone who isn't the assigned backup (e.g. the CM). */
+function WaitingForBackup() {
+  return (
+    <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--cream)] px-4 py-3.5 text-sm text-[color:var(--muted)]">
+      <p className="flex items-center gap-2 font-semibold text-[color:var(--ink)]">
+        <FileText size={15} className="text-[color:var(--muted)]" /> Waiting on the backup instructor
+      </p>
+      <p className="mt-1.5">
+        Only the assigned backup instructor can upload the offline claim (NxtClaim link
+        + charge slips), within 24 hours of the session. You&apos;ll see it here once they file it.
+      </p>
     </div>
   );
 }

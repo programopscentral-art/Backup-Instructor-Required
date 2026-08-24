@@ -143,6 +143,21 @@ export default async function TicketDetailPage({
     isAdmin: adminLike,
   };
 
+  // Only the assigned backup instructor (matched by email) — or Ops/HOD as a
+  // superuser override — may upload the offline invoice. A Capability Manager
+  // just watches the flow read-only once they've assigned the backup.
+  let isAssignedBackup = false;
+  if (ticket.assigned_backup_id && ctx.email) {
+    const { data: abp } = await supabase
+      .from("backup_instructor_pool")
+      .select("email")
+      .eq("id", ticket.assigned_backup_id)
+      .maybeSingle();
+    const abEmail = (abp as { email: string | null } | null)?.email ?? null;
+    isAssignedBackup = !!abEmail && abEmail.toLowerCase() === ctx.email.toLowerCase();
+  }
+  const canUpload = adminLike || isAssignedBackup;
+
   const cap = ticket.capabilities as { name: string; manager_name: string | null } | null;
 
   const details: [string, string | null][] = [
@@ -339,8 +354,10 @@ export default async function TicketDetailPage({
                 ? "Invoice & approvals"
                 : perms.isAdmin && !ticket.university_id && status === "raised"
                   ? "Resolve ticket data"
-                  : !ticket.capability_id && status === "raised" && perms.canAssign
-                    ? "Assign Capability Manager"
+                  : !ticket.capability_id && status === "raised"
+                    ? perms.isAdmin
+                      ? "Assign Capability Manager"
+                      : "Awaiting setup"
                     : "Next action"}
             </h2>
             {showInvoice ? (
@@ -349,6 +366,7 @@ export default async function TicketDetailPage({
                 ticketStatus={status}
                 overdue={overdue}
                 invoice={invoiceView}
+                canUpload={canUpload}
                 perms={{ isAdmin: perms.isAdmin, isHod: perms.isHod }}
               />
             ) : perms.isAdmin && !ticket.university_id && status === "raised" ? (
@@ -359,13 +377,23 @@ export default async function TicketDetailPage({
                 currentSubjectId={ticket.subject_id ?? null}
                 needsUniversity
               />
-            ) : !ticket.capability_id && status === "raised" && perms.canAssign ? (
-              <CapabilitySetup
-                ticketId={ticket.id}
-                subjectId={ticket.subject_id}
-                capabilities={(allCaps ?? []) as never}
-                cmUsers={(cmUsers ?? []) as never}
-              />
+            ) : !ticket.capability_id && status === "raised" ? (
+              // Linking a subject to a Capability + Manager is Ops/HOD data-setup,
+              // never a CM action. CMs just see a read-only "waiting" note.
+              perms.isAdmin ? (
+                <CapabilitySetup
+                  ticketId={ticket.id}
+                  subjectId={ticket.subject_id}
+                  capabilities={(allCaps ?? []) as never}
+                  cmUsers={(cmUsers ?? []) as never}
+                />
+              ) : (
+                <p className="text-sm text-[color:var(--muted)]">
+                  This ticket&apos;s subject isn&apos;t linked to a Capability yet. An
+                  Admin (Program Ops) needs to assign a Capability &amp; Manager before
+                  it can be worked. You&apos;ll be able to assign a backup once that&apos;s done.
+                </p>
+              )
             ) : (
               <TicketActions
                 ticketId={ticket.id}

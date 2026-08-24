@@ -65,18 +65,12 @@ export async function submitInvoice(_prev: InvoiceState, formData: FormData): Pr
     bpBlocked = (bp as { upload_blocked: boolean } | null)?.upload_blocked ?? false;
   }
 
-  // Only the assigned backup, their Capability Manager, or Ops/HOD may submit.
-  let allowed = adminLike;
-  if (!allowed && ticket.capability_id) {
-    allowed = ctx.assignments.some(
-      (a) =>
-        (a.role === "capability_manager" || a.role === "cma") &&
-        (a.scope_type === "global" || (a.scope_type === "capability" && a.scope_id === ticket.capability_id)),
-    );
-  }
+  // Only the assigned backup instructor uploads the claim. Ops/HOD keep a
+  // superuser override; Capability Managers do NOT — once they've assigned the
+  // backup, the invoice step is the instructor's (then Ops/HOD approve).
   const isTheBackup = !!bpEmail && bpEmail.toLowerCase() === ctx.email.toLowerCase();
-  if (!allowed && isTheBackup) allowed = true;
-  if (!allowed) return { error: "Only the assigned backup, their Capability Manager, or Ops can submit this invoice." };
+  const allowed = adminLike || isTheBackup;
+  if (!allowed) return { error: "Only the assigned backup instructor (or Ops/HOD) can upload this invoice." };
 
   // 3-red-flag lock — the instructor is blocked until an Admin resets it (Ops/CM can still file).
   if (!adminLike && isTheBackup && bpBlocked) {
