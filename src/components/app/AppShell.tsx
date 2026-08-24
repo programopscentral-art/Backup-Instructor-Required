@@ -139,11 +139,11 @@ export function AppShell({
       <Spotlight />
       {/* ---------- Top bar ---------- */}
       <header className="sticky top-0 z-40 border-b border-[color:var(--line)] bg-white/80 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-5 sm:px-8" ref={navRef}>
-          <div className="flex items-center gap-8">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8" ref={navRef}>
+          <div className="flex min-w-0 items-center gap-3 xl:gap-6">
             <Brand />
             {/* Desktop nav */}
-            <nav className="hidden items-center gap-1 lg:flex">
+            <nav className="hidden items-center gap-0.5 lg:flex xl:gap-1">
               {groups.map((g) => {
                 const active = groupActive(g);
                 if (g.href) {
@@ -151,7 +151,7 @@ export function AppShell({
                     <Link
                       key={g.label}
                       href={g.href}
-                      className="relative rounded-full px-3.5 py-2 text-sm font-semibold transition-colors"
+                      className="relative whitespace-nowrap rounded-full px-2.5 py-2 text-[13px] font-semibold transition-colors xl:px-3.5 xl:text-sm"
                       style={{ color: active ? "var(--accent)" : "var(--muted)" }}
                     >
                       {active && <ActiveBg />}
@@ -163,7 +163,7 @@ export function AppShell({
                   <div key={g.label} className="relative">
                     <button
                       onClick={() => setOpen(open === g.label ? null : g.label)}
-                      className="relative flex items-center gap-1 rounded-full px-3.5 py-2 text-sm font-semibold transition-colors"
+                      className="relative flex items-center gap-0.5 whitespace-nowrap rounded-full px-2.5 py-2 text-[13px] font-semibold transition-colors xl:gap-1 xl:px-3.5 xl:text-sm"
                       style={{ color: active || open === g.label ? "var(--accent)" : "var(--muted)" }}
                     >
                       {active && <ActiveBg />}
@@ -361,7 +361,7 @@ function Brand() {
         priority
         className="h-9 w-auto"
       />
-      <span className="flex items-center gap-2 sm:gap-2.5">
+      <span className="flex items-center gap-2 sm:gap-2.5 lg:hidden xl:flex">
         <span className="h-5 w-px bg-[color:var(--line-2)] sm:h-6" />
         <span className="whitespace-nowrap font-[family-name:var(--font-display)] text-[13px] font-bold text-[color:var(--accent)] sm:text-sm">
           Backup OS
