@@ -20,12 +20,13 @@ export default async function InstructorsPage() {
   const supabase = await createAuthedClient();
   const { data } = await supabase
     .from("instructors")
-    .select("id, university_id, subject_id, instructor_name, emp_id, instructor_type, deployment_status, status")
+    .select("id, university_id, subject_id, instructor_name, emp_id, email, instructor_type, deployment_status, status")
     .order("instructor_name");
 
   const columns: Column[] = [
     { key: "instructor_name", label: "Instructor", required: true },
     { key: "emp_id", label: "Emp ID", pill: true },
+    { key: "email", label: "Email (for login)", placeholder: "name@nxtwave.in" },
     { key: "university_id", label: "University", type: "select", options: refs.universities.options },
     { key: "subject_id", label: "Subject", type: "select", options: refs.subjects.options },
     { key: "instructor_type", label: "Type", type: "select", pill: true, options: [
@@ -53,7 +54,7 @@ export default async function InstructorsPage() {
           canWrite={canWrite}
           defaults={defaults}
           labelMaps={{ university_id: refs.universities.map, subject_id: refs.subjects.map }}
-          searchKeys={["instructor_name", "emp_id"]}
+          searchKeys={["instructor_name", "emp_id", "email"]}
         />
       </FadeIn>
     </div>

@@ -9,6 +9,7 @@ import { FadeIn } from "@/components/ui/motion";
 const COLUMNS: Column[] = [
   { key: "name", label: "Capability (subject vertical)", required: true },
   { key: "manager_name", label: "Capability Manager" },
+  { key: "manager_email", label: "Manager email (for login)", placeholder: "cm@nxtwave.in" },
   { key: "status", label: "Status", type: "select", pill: true, options: [
     { value: "active", label: "Active" },
     { value: "inactive", label: "Inactive" },
@@ -21,7 +22,7 @@ export default async function CapabilitiesPage() {
   const supabase = await createAuthedClient();
   const { data } = await supabase
     .from("capabilities")
-    .select("id, name, manager_name, status")
+    .select("id, name, manager_name, manager_email, status")
     .order("name");
 
   return (
@@ -38,7 +39,7 @@ export default async function CapabilitiesPage() {
           initial={(data ?? []) as Row[]}
           canWrite={canWrite}
           defaults={{ status: "active" }}
-          searchKeys={["name", "manager_name"]}
+          searchKeys={["name", "manager_name", "manager_email"]}
         />
       </FadeIn>
     </div>
