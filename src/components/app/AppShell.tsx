@@ -217,7 +217,7 @@ export function AppShell({
           </div>
 
           {/* Right: user */}
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             <NotificationBell />
             <div className="relative hidden sm:block">
               <button
@@ -352,16 +352,18 @@ function ActiveBg() {
 
 function Brand() {
   return (
-    <Link href="/dashboard" className="flex items-center gap-2.5 transition-transform hover:scale-[1.01]">
+    <Link href="/dashboard" className="flex shrink-0 items-center gap-2.5 transition-transform hover:scale-[1.01]">
       <Image
         src="/niat-logo.png"
         alt="NIAT — NxtWave of Innovation in Advanced Technologies"
         width={148}
         height={35}
         priority
-        className="h-9 w-auto"
+        className="h-9 w-[148px] shrink-0"
       />
-      <span className="flex items-center gap-2 sm:gap-2.5 lg:hidden xl:flex">
+      {/* Wordmark only where the nav is hidden (mobile/tablet) — on desktop the
+          logo alone brands it and the nav needs every pixel. */}
+      <span className="flex items-center gap-2 sm:gap-2.5 lg:hidden">
         <span className="h-5 w-px bg-[color:var(--line-2)] sm:h-6" />
         <span className="whitespace-nowrap font-[family-name:var(--font-display)] text-[13px] font-bold text-[color:var(--accent)] sm:text-sm">
           Backup OS
