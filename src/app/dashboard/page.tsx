@@ -68,8 +68,19 @@ export default async function DashboardHome() {
           <div className="orb" style={{ width: 190, height: 190, background: "rgba(255,255,255,0.28)", top: -60, right: 30 }} />
           <div className="orb" style={{ width: 150, height: 150, background: "rgba(255,255,255,0.16)", bottom: -60, left: "28%", animationDelay: "2.5s" }} />
           <div className="relative z-10">
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-xs font-bold uppercase tracking-wider backdrop-blur">
-              <span className="text-sm">{theme.emoji}</span> {theme.team}
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div className="inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-xs font-bold uppercase tracking-wider backdrop-blur">
+                <span className="text-sm">{theme.emoji}</span> {theme.team}
+              </div>
+              {/* Product lockup — the home the "Backup OS" name lost when it left the desktop header */}
+              <div className="flex flex-none items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3 py-1.5 backdrop-blur">
+                <span className="grid h-5 w-5 place-items-center rounded-md bg-white/90 text-[11px] font-black text-[color:var(--accent)] shadow-sm">
+                  B
+                </span>
+                <span className="font-[family-name:var(--font-display)] text-sm font-bold leading-none tracking-tight">
+                  Backup OS
+                </span>
+              </div>
             </div>
             <h1 className="font-[family-name:var(--font-display)] text-3xl font-bold tracking-tight sm:text-4xl">
               Welcome back, {firstName}
