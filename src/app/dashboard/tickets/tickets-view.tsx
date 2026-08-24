@@ -25,6 +25,11 @@ export function TicketsView({ tickets }: { tickets: TicketRow[] }) {
   const [status, setStatus] = useState("");
   const [uni, setUni] = useState("");
   const [sort, setSort] = useState<"newest" | "oldest" | "stage">("newest");
+  const [needsOnly, setNeedsOnly] = useState(false);
+
+  // Unresolved intake (university didn't match) — an admin must resolve it.
+  const needsAdmin = (t: TicketRow) => !t.universities && t.status === "raised";
+  const needsCount = tickets.filter(needsAdmin).length;
 
   const universities = useMemo(
     () => Array.from(new Set(tickets.map((t) => t.universities?.name).filter(Boolean) as string[])).sort(),
@@ -38,6 +43,7 @@ export function TicketsView({ tickets }: { tickets: TicketRow[] }) {
   const view = useMemo(() => {
     const needle = q.trim().toLowerCase();
     let out = tickets.filter((t) => {
+      if (needsOnly && !needsAdmin(t)) return false;
       if (status && t.status !== status) return false;
       if (uni && t.universities?.name !== uni) return false;
       if (needle) {
@@ -52,7 +58,8 @@ export function TicketsView({ tickets }: { tickets: TicketRow[] }) {
       return sort === "newest" ? -cmp : cmp;
     });
     return out;
-  }, [tickets, q, status, uni, sort]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tickets, q, status, uni, sort, needsOnly]);
 
   return (
     <div>
@@ -84,6 +91,18 @@ export function TicketsView({ tickets }: { tickets: TicketRow[] }) {
           <option value="oldest">Oldest first</option>
           <option value="stage">By stage</option>
         </select>
+        {needsCount > 0 && (
+          <button
+            onClick={() => setNeedsOnly((v) => !v)}
+            className="rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors"
+            style={{
+              background: needsOnly ? "var(--rose)" : "#fdeef1",
+              color: needsOnly ? "#fff" : "var(--rose)",
+            }}
+          >
+            ⚠ Needs admin · {needsCount}
+          </button>
+        )}
         <span className="ml-auto text-xs text-[color:var(--muted)]">{view.length} of {tickets.length}</span>
       </div>
 
@@ -106,6 +125,7 @@ export function TicketsView({ tickets }: { tickets: TicketRow[] }) {
                           <span className="font-[family-name:var(--font-display)] text-sm font-bold text-[color:var(--ink)]">{t.ticket_no}</span>
                           <span className={`pill ${meta.pill}`}>{meta.label}</span>
                           {t.mode !== "undecided" && <span className="pill pill-muted">{MODE_LABEL[t.mode]}</span>}
+                          {needsAdmin(t) && <span className="pill pill-crit">⚠ Needs admin</span>}
                         </div>
                         <p className="mt-1 text-sm text-[color:var(--ink)]">
                           {t.subjects?.name ?? "—"} · <span className="text-[color:var(--muted)]">{t.universities?.name ?? "—"}</span>

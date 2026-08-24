@@ -332,3 +332,84 @@ export async function assignCapability(_prev: ActionState, formData: FormData): 
   revalidatePath(`/dashboard/tickets/${ticketId}`);
   return { ok: "Capability & manager assigned." };
 }
+
+/**
+ * Resolve unmatched intake data on a Zoho-raised ticket: set the University
+ * (pick existing or create a new one on the spot) and optionally remap the
+ * Subject to an existing one (which also re-routes capability + CM). Admin/HOD
+ * only. Unblocks tickets whose Zoho data didn't match the product directories.
+ */
+export async function resolveTicketIntake(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const ctx = await getSessionContext();
+  if (!ctx || !isAdminLike(ctx.roles)) return { error: "Only Ops/HOD can resolve ticket data." };
+
+  const ticketId = String(formData.get("ticket_id") || "");
+  if (!ticketId) return { error: "Missing ticket." };
+  let universityId = String(formData.get("university_id") || "");
+  const newUniName = String(formData.get("new_university_name") || "").trim();
+  const newUniCity = String(formData.get("new_university_city") || "").trim() || null;
+  const subjectId = String(formData.get("subject_id") || "") || null;
+
+  const supabase = await createAuthedClient();
+  const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  const notes: string[] = [];
+
+  // ---- University: create new, or set existing ----
+  if (universityId === "__new__" || (!universityId && newUniName)) {
+    if (!newUniName) return { error: "Enter a university name." };
+    const { data: u, error } = await supabase
+      .from("universities")
+      .insert({ name: newUniName, city: newUniCity, status: "active" })
+      .select("id, name")
+      .single();
+    if (error) return { error: error.message };
+    universityId = u.id;
+    update.university_id = universityId;
+    notes.push(`University created & set: ${u.name}`);
+  } else if (universityId) {
+    update.university_id = universityId;
+    const { data: u } = await supabase.from("universities").select("name").eq("id", universityId).maybeSingle();
+    notes.push(`University set: ${(u as { name: string } | null)?.name ?? "—"}`);
+  }
+
+  // ---- Optional subject remap (re-routes capability + CM) ----
+  if (subjectId) {
+    const { data: s } = await supabase
+      .from("subjects")
+      .select("id, name, capability_id")
+      .eq("id", subjectId)
+      .maybeSingle();
+    const subj = s as { id: string; name: string; capability_id: string | null } | null;
+    if (subj) {
+      update.subject_id = subj.id;
+      update.capability_id = subj.capability_id ?? null;
+      if (subj.capability_id) {
+        const { data: cap } = await supabase
+          .from("capabilities")
+          .select("manager_user_id")
+          .eq("id", subj.capability_id)
+          .maybeSingle();
+        update.assigned_cm = (cap as { manager_user_id: string | null } | null)?.manager_user_id ?? null;
+      }
+      notes.push(`Subject set: ${subj.name}`);
+    }
+  }
+
+  if (notes.length === 0) return { error: "Pick a university (or a subject) to set." };
+
+  const { error: tErr } = await supabase.from("tickets").update(update).eq("id", ticketId);
+  if (tErr) return { error: tErr.message };
+
+  await supabase.from("ticket_events").insert({
+    ticket_id: ticketId,
+    actor_id: ctx.userId,
+    actor_name: ctx.profile?.full_name || ctx.email,
+    from_status: "raised",
+    to_status: "raised",
+    note: `Resolved intake — ${notes.join("; ")}.`,
+  });
+
+  revalidatePath(`/dashboard/tickets/${ticketId}`);
+  revalidatePath("/dashboard/tickets");
+  return { ok: `Resolved — ${notes.join("; ")}.` };
+}

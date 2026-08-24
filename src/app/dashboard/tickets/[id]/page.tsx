@@ -16,6 +16,7 @@ import { FadeIn } from "@/components/ui/motion";
 import { TicketActions } from "./ticket-actions";
 import { InvoicePanel, type InvoiceView } from "./invoice-panel";
 import { CapabilitySetup } from "./capability-setup";
+import { ResolveIntake } from "./resolve-intake";
 
 export default async function TicketDetailPage({
   params,
@@ -36,7 +37,7 @@ export default async function TicketDetailPage({
     .maybeSingle();
   if (!ticket) notFound();
 
-  const [{ data: events }, { data: pool }, { data: allCaps }, { data: cmUsers }] = await Promise.all([
+  const [{ data: events }, { data: pool }, { data: allCaps }, { data: cmUsers }, { data: allUnis }, { data: allSubjects }] = await Promise.all([
     supabase.from("ticket_events").select("*").eq("ticket_id", id).order("created_at", { ascending: true }),
     ticket.capability_id
       ? supabase
@@ -46,6 +47,8 @@ export default async function TicketDetailPage({
       : Promise.resolve({ data: [] as never[] }),
     supabase.from("capabilities").select("id, name, manager_name").order("name"),
     supabase.rpc("list_capability_managers"),
+    supabase.from("universities").select("id, name").eq("status", "active").order("name"),
+    supabase.from("subjects").select("id, name").eq("status", "active").order("name"),
   ]);
 
   // Smart-assign data: each pool instructor's active load + date clash with THIS
@@ -334,9 +337,11 @@ export default async function TicketDetailPage({
             <h2 className="mb-4 font-[family-name:var(--font-display)] text-base font-bold">
               {showInvoice
                 ? "Invoice & approvals"
-                : !ticket.capability_id && status === "raised" && perms.canAssign
-                  ? "Assign Capability Manager"
-                  : "Next action"}
+                : perms.isAdmin && !ticket.university_id && status === "raised"
+                  ? "Resolve ticket data"
+                  : !ticket.capability_id && status === "raised" && perms.canAssign
+                    ? "Assign Capability Manager"
+                    : "Next action"}
             </h2>
             {showInvoice ? (
               <InvoicePanel
@@ -345,6 +350,14 @@ export default async function TicketDetailPage({
                 overdue={overdue}
                 invoice={invoiceView}
                 perms={{ isAdmin: perms.isAdmin, isHod: perms.isHod }}
+              />
+            ) : perms.isAdmin && !ticket.university_id && status === "raised" ? (
+              <ResolveIntake
+                ticketId={ticket.id}
+                universities={(allUnis ?? []) as never}
+                subjects={(allSubjects ?? []) as never}
+                currentSubjectId={ticket.subject_id ?? null}
+                needsUniversity
               />
             ) : !ticket.capability_id && status === "raised" && perms.canAssign ? (
               <CapabilitySetup
