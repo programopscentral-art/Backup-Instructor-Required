@@ -24,6 +24,12 @@ interface Props {
   defaults?: Record<string, unknown>;
   labelMaps?: Record<string, Record<string, string>>;
   searchKeys?: string[];
+  /**
+   * Per-row edit/delete scope (serializable — server→client safe). Absent = all
+   * rows editable. When set, only rows whose `key` value is in `allow` are editable
+   * (e.g. scope a capability-manager to their own capability ids).
+   */
+  editScope?: { key: string; allow: string[] };
 }
 
 function emptyDraft(columns: Column[]): Record<string, string> {
@@ -38,9 +44,12 @@ export function DirectoryTable({
   defaults = {},
   labelMaps = {},
   searchKeys,
+  editScope,
 }: Props) {
   const { rows } = useRealtimeTable(table, initial);
   const supabase = createClient();
+  const rowEditable = (row: Row) =>
+    !editScope ? true : editScope.allow.includes(String(row[editScope.key] ?? ""));
 
   const [q, setQ] = useState("");
   const [filters, setFilters] = useState<Record<string, string>>({});
@@ -343,7 +352,7 @@ export function DirectoryTable({
                                 <X size={14} />
                               </button>
                             </>
-                          ) : (
+                          ) : rowEditable(row) ? (
                             <>
                               <button onClick={() => startEdit(row)} className="btn btn-ghost btn-sm" title="Edit">
                                 <Pencil size={14} />
@@ -352,6 +361,8 @@ export function DirectoryTable({
                                 <Trash2 size={14} />
                               </button>
                             </>
+                          ) : (
+                            <span className="text-xs text-[color:var(--faint)]" title="Outside your capability">—</span>
                           )}
                         </div>
                       </td>

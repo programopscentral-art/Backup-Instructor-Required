@@ -9,8 +9,29 @@ import { FadeIn } from "@/components/ui/motion";
 
 export default async function BackupPoolPage() {
   const ctx = await getSessionContext();
-  const canWrite = isAdminLike(ctx?.roles ?? []);
+  const roles = ctx?.roles ?? [];
+  const adminLike = isAdminLike(roles);
+
+  // Capability-Manager scope: global CMs manage the whole pool; capability-scoped
+  // CMs manage only their own capabilities' backups.
+  const capAssigns = (ctx?.assignments ?? []).filter(
+    (a) => a.role === "capability_manager" || a.role === "cma",
+  );
+  const globalCM = capAssigns.some((a) => a.scope_type === "global");
+  const capIds = capAssigns
+    .filter((a) => a.scope_type === "capability" && a.scope_id)
+    .map((a) => a.scope_id as string);
+  const fullAccess = adminLike || globalCM;
+  const canWrite = fullAccess || capIds.length > 0;
+
   const refs = await getRefs();
+  // Scoped CMs can only file backups under their own capabilities.
+  const capOptions = fullAccess
+    ? refs.capabilities.options
+    : refs.capabilities.options.filter((o) => capIds.includes(o.value));
+  // Scoped CMs may only edit/delete rows in their capabilities (serializable scope).
+  const editScope = fullAccess ? undefined : { key: "capability_id", allow: capIds };
+
   const supabase = await createAuthedClient();
   const { data } = await supabase
     .from("backup_instructor_pool")
@@ -20,7 +41,7 @@ export default async function BackupPoolPage() {
   const columns: Column[] = [
     { key: "instructor_name", label: "Backup Instructor", required: true },
     { key: "emp_id", label: "Emp ID", pill: true },
-    { key: "capability_id", label: "Capability", type: "select", options: refs.capabilities.options },
+    { key: "capability_id", label: "Capability", type: "select", required: true, options: capOptions },
     { key: "availability_mode", label: "Mode", type: "select", pill: true, options: [
       { value: "online", label: "Online" },
       { value: "offline", label: "Offline" },
@@ -46,7 +67,13 @@ export default async function BackupPoolPage() {
           columns={columns}
           initial={(data ?? []) as Row[]}
           canWrite={canWrite}
-          defaults={{ availability_mode: "both", current_status: "available", status: "active" }}
+          editScope={editScope}
+          defaults={{
+            availability_mode: "both",
+            current_status: "available",
+            status: "active",
+            ...(!fullAccess && capIds.length === 1 ? { capability_id: capIds[0] } : {}),
+          }}
           labelMaps={{ capability_id: refs.capabilities.map }}
           searchKeys={["instructor_name", "emp_id"]}
         />
