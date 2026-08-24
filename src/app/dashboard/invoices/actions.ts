@@ -50,8 +50,23 @@ export async function submitInvoice(_prev: InvoiceState, formData: FormData): Pr
   if (ticket.mode !== "offline") return { error: "Invoices are only for offline sessions." };
   if (ticket.status !== "invoice_pending") return { error: "This ticket isn't in the invoice stage yet." };
 
+  const adminLike = isAdminLike(ctx.roles);
+
+  // Assigned backup's email + upload-lock state (3 red flags).
+  let bpEmail: string | null = null;
+  let bpBlocked = false;
+  if (ticket.assigned_backup_id) {
+    const { data: bp } = await supabase
+      .from("backup_instructor_pool")
+      .select("email, upload_blocked")
+      .eq("id", ticket.assigned_backup_id)
+      .maybeSingle();
+    bpEmail = (bp as { email: string | null } | null)?.email ?? null;
+    bpBlocked = (bp as { upload_blocked: boolean } | null)?.upload_blocked ?? false;
+  }
+
   // Only the assigned backup, their Capability Manager, or Ops/HOD may submit.
-  let allowed = isAdminLike(ctx.roles);
+  let allowed = adminLike;
   if (!allowed && ticket.capability_id) {
     allowed = ctx.assignments.some(
       (a) =>
@@ -59,16 +74,14 @@ export async function submitInvoice(_prev: InvoiceState, formData: FormData): Pr
         (a.scope_type === "global" || (a.scope_type === "capability" && a.scope_id === ticket.capability_id)),
     );
   }
-  if (!allowed && ticket.assigned_backup_id) {
-    const { data: bp } = await supabase
-      .from("backup_instructor_pool")
-      .select("email")
-      .eq("id", ticket.assigned_backup_id)
-      .maybeSingle();
-    const bpEmail = (bp as { email: string | null } | null)?.email;
-    if (bpEmail && bpEmail.toLowerCase() === ctx.email.toLowerCase()) allowed = true;
-  }
+  const isTheBackup = !!bpEmail && bpEmail.toLowerCase() === ctx.email.toLowerCase();
+  if (!allowed && isTheBackup) allowed = true;
   if (!allowed) return { error: "Only the assigned backup, their Capability Manager, or Ops can submit this invoice." };
+
+  // 3-red-flag lock — the instructor is blocked until an Admin resets it (Ops/CM can still file).
+  if (!adminLike && isTheBackup && bpBlocked) {
+    return { error: "Invoice upload is locked — you've reached 3 red flags. Ask an Admin/CM to reset your flags before submitting." };
+  }
 
   const late = ticket.invoice_due_at ? new Date() > new Date(ticket.invoice_due_at) : false;
   const payload = {

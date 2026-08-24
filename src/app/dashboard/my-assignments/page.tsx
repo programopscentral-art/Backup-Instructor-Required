@@ -38,8 +38,10 @@ export default async function MyAssignmentsPage() {
 
   const supabase = await createAuthedClient();
   // Which backup-pool identities belong to this login (by email)?
-  const { data: pools } = await supabase.from("backup_instructor_pool").select("id").ilike("email", ctx.email);
+  const { data: pools } = await supabase.from("backup_instructor_pool").select("id, red_flags, upload_blocked").ilike("email", ctx.email);
   const poolIds = (pools ?? []).map((p) => (p as { id: string }).id);
+  const locked = (pools ?? []).some((p) => (p as { upload_blocked: boolean }).upload_blocked);
+  const flags = Math.max(0, ...(pools ?? []).map((p) => (p as { red_flags: number }).red_flags ?? 0), 0);
 
   let rows: Row[] = [];
   let invoicedIds = new Set<string>();
@@ -80,6 +82,19 @@ export default async function MyAssignmentsPage() {
         title="My assignments"
         subtitle="Your backup sessions — status, what to do next, and invoice upload."
       />
+
+      {!notRegistered && (flags > 0 || locked) && (
+        <FadeIn className="mb-6">
+          <div className={`flex items-start gap-2.5 rounded-xl border px-4 py-3 text-sm ${locked ? "border-[#f6cdd6] bg-[#fdeef1] text-[color:var(--rose)]" : "border-amber-300 bg-amber-50 text-[color:var(--amber,#b45309)]"}`}>
+            <AlertTriangle size={17} className="mt-0.5 flex-none" />
+            {locked ? (
+              <span><strong>Invoice upload locked.</strong> You&apos;ve hit 3 red flags (missed 24h invoice windows). An Admin must reset your flags before you can upload again.</span>
+            ) : (
+              <span><strong>{flags} red flag{flags > 1 ? "s" : ""}.</strong> Submit invoices within 24h of each offline session — at 3 flags your upload is locked until an Admin resets it.</span>
+            )}
+          </div>
+        </FadeIn>
+      )}
 
       {notRegistered ? (
         <FadeIn>

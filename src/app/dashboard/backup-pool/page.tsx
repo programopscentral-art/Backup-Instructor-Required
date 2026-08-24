@@ -35,13 +35,14 @@ export default async function BackupPoolPage() {
   const supabase = await createAuthedClient();
   const { data } = await supabase
     .from("backup_instructor_pool")
-    .select("id, instructor_name, emp_id, email, capability_id, availability_mode, current_status")
+    .select("id, instructor_name, emp_id, email, red_flags, capability_id, availability_mode, current_status")
     .order("instructor_name");
 
   const columns: Column[] = [
     { key: "instructor_name", label: "Backup Instructor", required: true },
     { key: "emp_id", label: "Emp ID", pill: true },
     { key: "email", label: "Email (for login)", placeholder: "name@nxtwave.in" },
+    { key: "red_flags", label: "Red flags (set 0 to unlock)", pill: true, placeholder: "0" },
     { key: "capability_id", label: "Capability", type: "select", required: true, options: capOptions },
     { key: "availability_mode", label: "Mode", type: "select", pill: true, options: [
       { value: "online", label: "Online" },
