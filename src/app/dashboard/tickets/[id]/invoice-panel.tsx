@@ -57,6 +57,18 @@ export function InvoicePanel({
     );
   }
 
+  // Returned for fix → let the submitter correct and re-file.
+  if (invoice.status === "returned") {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-lg border border-[#f6cdd6] bg-[#fdeef1] px-3 py-2.5 text-sm text-[color:var(--rose)]">
+          <strong>Returned:</strong> {invoice.return_reason ?? "Please correct the details and resubmit."}
+        </div>
+        <SubmitForm ticketId={ticketId} onDone={() => router.refresh()} />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -97,11 +109,6 @@ export function InvoicePanel({
         </div>
       )}
 
-      {invoice.return_reason && invoice.status === "returned" && (
-        <p className="rounded-lg border border-[#f6cdd6] bg-[#fdeef1] px-3 py-2 text-sm text-[color:var(--rose)]">
-          Returned: {invoice.return_reason}
-        </p>
-      )}
 
       <p className="text-xs text-[color:var(--faint)]">
         Filed by {invoice.submitted_by_name ?? "—"}

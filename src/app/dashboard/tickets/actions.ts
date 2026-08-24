@@ -6,7 +6,7 @@ import { createAuthedClient } from "@/lib/supabase/server";
 import { isAdminLike } from "@/lib/auth/roles";
 import { notify } from "@/lib/notify";
 import { closeZohoTicket } from "@/lib/zoho/close";
-import type { TicketStatus } from "@/lib/tickets/status";
+import { STATUS_META, type TicketStatus } from "@/lib/tickets/status";
 
 export interface ActionState {
   ok?: string;
@@ -137,6 +137,20 @@ export async function createTicket(_prev: ActionState, formData: FormData): Prom
   return { ok: "created", ticketId: ticket.id };
 }
 
+// Legal predecessor statuses for each action — enforces the state machine
+// server-side (the client only hides buttons, which isn't a real guard).
+const PRE: Record<string, TicketStatus[]> = {
+  assign: ["raised"],
+  confirm: ["backup_assigned"],
+  session: ["confirmed"],
+  to_invoice: ["session_done"],
+  close_online: ["session_done"],
+  ops_approve: ["invoice_pending"],
+  hod_approve: ["ops_approved"],
+  close: ["hod_approved"],
+  cancel: ["raised", "backup_assigned", "confirmed", "session_done", "invoice_pending", "ops_approved", "hod_approved"],
+};
+
 const NEXT: Record<string, { to: TicketStatus; note: string }> = {
   confirm: { to: "confirmed", note: "Ops confirmed & dispatched the backup." },
   session: { to: "session_done", note: "Session delivered." },
@@ -167,6 +181,10 @@ export async function transitionTicket(_prev: ActionState, formData: FormData): 
   if (!ticket) return { error: "Ticket not found." };
 
   const from = ticket.status as TicketStatus;
+  // Reject illegal transitions (skip/reverse) regardless of what the client sends.
+  if (!PRE[action]?.includes(from)) {
+    return { error: `Can't do that from "${STATUS_META[from]?.label ?? from}".` };
+  }
   const actorName = ctx.profile?.full_name || ctx.email;
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
   let to: TicketStatus;
