@@ -11,8 +11,7 @@ export const dynamic = "force-dynamic";
  * builds an Adaptive Card, posts it to the Teams Workflow URL, and marks the
  * event delivered. Idempotent: an already-sent event is skipped (retry-safe).
  */
-function secretOk(req: Request): boolean {
-  const expected = process.env.TEAMS_DISPATCH_SECRET;
+function secretOk(req: Request, expected: string | null): boolean {
   if (!expected) return false;
   const got = req.headers.get("x-teams-secret") ?? "";
   const a = crypto.createHash("sha256").update(got).digest();
@@ -21,11 +20,23 @@ function secretOk(req: Request): boolean {
 }
 
 export async function POST(req: Request) {
-  if (!secretOk(req)) {
+  const db = createAdminClient();
+
+  // Config lives in the DB (teams_config) so the whole integration is
+  // DB-driven — no Vercel env change needed to activate/rotate. Env is a fallback.
+  const { data: cfg } = await db
+    .from("teams_config")
+    .select("enabled, teams_webhook_url, dispatch_secret")
+    .eq("id", true)
+    .maybeSingle();
+
+  const expectedSecret = (cfg?.dispatch_secret as string | null) ?? process.env.TEAMS_DISPATCH_SECRET ?? null;
+  if (!secretOk(req, expectedSecret)) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
+  if (!cfg?.enabled) return NextResponse.json({ ok: true, skipped: "disabled" });
 
-  const webhook = process.env.TEAMS_WEBHOOK_URL;
+  const webhook = (cfg?.teams_webhook_url as string | null) ?? process.env.TEAMS_WEBHOOK_URL ?? null;
   if (!webhook) return NextResponse.json({ ok: true, skipped: "no webhook configured" });
 
   let eventId = "";
@@ -36,8 +47,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "invalid json" }, { status: 400 });
   }
   if (!eventId) return NextResponse.json({ ok: false, error: "missing event_id" }, { status: 400 });
-
-  const db = createAdminClient();
 
   const { data: ev } = await db
     .from("ticket_events")

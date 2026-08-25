@@ -14,12 +14,14 @@ create extension if not exists pg_net;
 -- Single-row config (secret + target). RLS-on with NO policies => unreadable to
 -- normal users; only the SECURITY DEFINER functions and the service role touch it.
 create table if not exists public.teams_config (
-  id              boolean primary key default true,
-  enabled         boolean not null default false,
-  dispatch_url    text,     -- our /api/teams/event route
-  dispatch_secret text,     -- shared with the route's TEAMS_DISPATCH_SECRET env
+  id                boolean primary key default true,
+  enabled           boolean not null default false,
+  dispatch_url      text,   -- our /api/teams/event route (the DB trigger calls this)
+  dispatch_secret   text,   -- guards the dispatch route (trigger sends it, route checks it)
+  teams_webhook_url text,   -- the Teams Power Automate Workflow URL (route posts the card here)
   constraint teams_config_one_row check (id = true)
 );
+alter table public.teams_config add column if not exists teams_webhook_url text;
 alter table public.teams_config enable row level security;
 insert into public.teams_config (id, enabled) values (true, false) on conflict (id) do nothing;
 
