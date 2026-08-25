@@ -39,19 +39,21 @@ export async function GET(req: Request) {
   const from = searchParams.get("from") || "";
   const to = searchParams.get("to") || "";
   const university = adminLike ? searchParams.get("university") || "" : "";
+  const state = adminLike ? searchParams.get("state") || "" : "";
 
   const supabase = await createAuthedClient();
   let q = supabase
     .from("tickets")
     .select(
-      "ticket_no, status, mode, reason_category, absent_instructor_name, raised_by_name, raised_by_email, created_at, universities(name), subjects(name), capabilities(manager_name)",
+      "ticket_no, status, mode, reason_category, absent_instructor_name, raised_by_name, raised_by_email, created_at, universities(name, state), subjects(name), capabilities(manager_name)",
     )
     .order("created_at", { ascending: false });
   if (from) q = q.gte("created_at", from);
   if (to) q = q.lte("created_at", `${to}T23:59:59`);
   if (university) q = q.eq("university_id", university);
   const { data } = await q;
-  const rows = (data ?? []) as unknown as ExportRow[];
+  let rows = (data ?? []) as unknown as ExportRow[];
+  if (state) rows = rows.filter((r) => (r.universities as { state?: string | null } | null)?.state === state);
 
   const headers = [
     "Ticket", "Status", "Mode", "Reason", "University", "Subject",

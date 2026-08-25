@@ -78,6 +78,7 @@ export default async function AnalyticsPage({
   const from = str(sp.from);
   const to = str(sp.to);
   const university = adminLike ? str(sp.university) : "";
+  const state = adminLike ? str(sp.state) : "";
   const view = str(sp.view) === "budget" ? "budget" : "tickets";
 
   // Preserve filters when switching tabs.
@@ -87,6 +88,7 @@ export default async function AnalyticsPage({
     if (from) p.set("from", from);
     if (to) p.set("to", to);
     if (university) p.set("university", university);
+    if (state) p.set("state", state);
     p.set("view", v);
     return `/dashboard/analytics?${p.toString()}`;
   };
@@ -102,7 +104,9 @@ export default async function AnalyticsPage({
   if (to) query = query.lte("created_at", `${to}T23:59:59`);
   if (university) query = query.eq("university_id", university);
   const { data } = await query;
-  const rows = (data ?? []) as unknown as Row[];
+  let rows = (data ?? []) as unknown as Row[];
+  // State filter (in memory — every KPI/chart/budget then respects it).
+  if (state) rows = rows.filter((r) => r.universities?.state === state);
 
   // Invoice budget per ticket (travel / accommodation / other / total).
   const invMap = new Map<string, { amount: number; travel: number; accommodation: number; other: number }>();
@@ -235,10 +239,17 @@ export default async function AnalyticsPage({
     .slice(0, 10);
 
   const refs = adminLike ? await getRefs() : null;
+  let states: string[] = [];
+  if (adminLike) {
+    const { data: st } = await supabase.from("universities").select("state").not("state", "is", null);
+    states = [...new Set(((st ?? []) as { state: string | null }[]).map((x) => x.state).filter(Boolean) as string[])].sort();
+  }
   const scopeLabel = adminLike
-    ? university
-      ? refs?.universities.map[university] ?? "Selected university"
-      : "All universities"
+    ? state
+      ? `${state}${university ? " · " + (refs?.universities.map[university] ?? "1 university") : ""}`
+      : university
+        ? refs?.universities.map[university] ?? "Selected university"
+        : "All universities"
     : "Your campus";
 
   return (
@@ -272,8 +283,9 @@ export default async function AnalyticsPage({
       <FadeIn>
         <AnalyticsFilters
           universities={refs?.universities.options ?? []}
+          states={states}
           isAdmin={adminLike}
-          current={{ granularity, from, to, university }}
+          current={{ granularity, from, to, university, state }}
         />
       </FadeIn>
 

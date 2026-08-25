@@ -13,12 +13,14 @@ const GRANS: [string, string][] = [
 
 export function AnalyticsFilters({
   universities,
+  states,
   isAdmin,
   current,
 }: {
   universities: { value: string; label: string }[];
+  states: string[];
   isAdmin: boolean;
-  current: { granularity: string; from: string; to: string; university: string };
+  current: { granularity: string; from: string; to: string; university: string; state: string };
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -34,13 +36,14 @@ export function AnalyticsFilters({
     [sp, pathname, router],
   );
 
-  const hasFilters = current.from || current.to || current.university;
+  const hasFilters = current.from || current.to || current.university || current.state;
 
-  // CSV export honours the current date/university filters (not granularity).
+  // CSV export honours the current date/university/state filters (not granularity).
   const exportParams = new URLSearchParams();
   if (current.from) exportParams.set("from", current.from);
   if (current.to) exportParams.set("to", current.to);
   if (current.university) exportParams.set("university", current.university);
+  if (current.state) exportParams.set("state", current.state);
   const exportHref = `/dashboard/analytics/export${exportParams.toString() ? `?${exportParams}` : ""}`;
 
   return (
@@ -93,6 +96,23 @@ export function AnalyticsFilters({
           className="input h-10"
         />
       </div>
+
+      {/* State (admin only) */}
+      {isAdmin && (
+        <div className="min-w-[150px]">
+          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-[color:var(--faint)]">
+            State
+          </label>
+          <select value={current.state} onChange={(e) => setParam("state", e.target.value)} className="input h-10">
+            <option value="">All states</option>
+            {states.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* University (admin only) */}
       {isAdmin && (
