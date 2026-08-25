@@ -63,7 +63,8 @@ export function LogsView({
     });
   }, [events, uni, q, cat]);
 
-  const fmt = (t: string) => new Date(t).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
+  const fmt = (t: string) =>
+    new Date(t).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" });
 
   return (
     <div>

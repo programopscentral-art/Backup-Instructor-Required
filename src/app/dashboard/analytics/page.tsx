@@ -19,7 +19,9 @@ const pad = (n: number) => String(n).padStart(2, "0");
 
 /** Bucket a timestamp into a {key,label} for the chosen granularity. */
 function bucketOf(iso: string, gran: Gran): { key: string; label: string } {
-  const d = new Date(iso);
+  // Bucket by IST wall-clock, not the server's UTC — otherwise tickets created
+  // between 00:00–05:30 IST fall into the previous day.
+  const d = new Date(new Date(iso).toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
   const y = d.getFullYear();
   if (gran === "year") return { key: String(y), label: String(y) };
   if (gran === "month") {

@@ -13,6 +13,7 @@ import {
 } from "@/lib/tickets/status";
 import { AlertTriangle } from "lucide-react";
 import { FadeIn } from "@/components/ui/motion";
+import { fmtIST } from "@/lib/format";
 import { TicketActions } from "./ticket-actions";
 import { InvoicePanel, type InvoiceView } from "./invoice-panel";
 import { CapabilitySetup } from "./capability-setup";
@@ -334,7 +335,7 @@ export default async function TicketDetailPage({
                       )}
                     </p>
                     <p className="mt-0.5 text-xs text-[color:var(--faint)]">
-                      {e.actor_name ?? "System"} · {new Date(e.created_at).toLocaleString("en-IN")}
+                      {e.actor_name ?? "System"} · {fmtIST(e.created_at)}
                     </p>
                   </li>
                 ))}

@@ -5,6 +5,7 @@ import { getSessionContext } from "@/lib/auth/session";
 import { createAuthedClient } from "@/lib/supabase/server";
 import { isAdminLike } from "@/lib/auth/roles";
 import { notify } from "@/lib/notify";
+import { notifyBackup, notifyHod } from "@/lib/notify-targets";
 import { closeZohoTicket } from "@/lib/zoho/close";
 import { STATUS_META, type TicketStatus } from "@/lib/tickets/status";
 
@@ -243,23 +244,28 @@ export async function transitionTicket(_prev: ActionState, formData: FormData): 
 
   await logEvent(supabase, ticketId, ctx.userId, actorName, from, to, note ?? NEXT[action]?.note);
 
-  // Notify the university (raiser) when a backup is assigned / confirmed.
-  if (action === "assign" || action === "confirm") {
+  // Fire the right notifications for this step: raiser, the assigned backup,
+  // and the Ops/HOD approval queues — so every party is alerted end to end.
+  const NOTIFY_ACTIONS = ["assign", "confirm", "to_invoice", "ops_approve", "hod_approve"];
+  if (NOTIFY_ACTIONS.includes(action)) {
     const { data: full } = await supabase
       .from("tickets")
-      .select("ticket_no, raised_by, mode, assigned_backup_name, source, zoho_record_id, universities(name), subjects(name)")
+      .select("ticket_no, raised_by, mode, assigned_backup_id, assigned_backup_name, source, zoho_record_id, universities(name), subjects(name)")
       .eq("id", ticketId)
       .maybeSingle();
     const f = full as unknown as {
       ticket_no: string;
       raised_by: string | null;
       mode: string;
+      assigned_backup_id: string | null;
       assigned_backup_name: string | null;
       source: string | null;
       zoho_record_id: string | null;
       universities: { name: string } | null;
       subjects: { name: string } | null;
     } | null;
+    const subj = f?.subjects?.name ?? "the subject";
+    const uni = f?.universities?.name ?? "the university";
 
     // Backup allocated & dispatched → close the origin Zoho ticket (best-effort).
     if (action === "confirm" && f?.source === "zoho" && f.zoho_record_id) {
@@ -274,10 +280,10 @@ export async function transitionTicket(_prev: ActionState, formData: FormData): 
         r.ok ? "Zoho ticket closed (backup allocated)." : `Zoho close failed: ${r.detail}`,
       );
     }
-    if (f?.raised_by) {
+
+    // Raiser — on assign / confirm.
+    if ((action === "assign" || action === "confirm") && f?.raised_by) {
       const { data: raiser } = await supabase.from("profiles").select("email").eq("id", f.raised_by).maybeSingle();
-      const subj = f.subjects?.name ?? "the subject";
-      const uni = f.universities?.name ?? "the university";
       const title = action === "confirm" ? `✅ Backup confirmed — ${f.ticket_no}` : `Backup assigned — ${f.ticket_no}`;
       const body =
         action === "confirm"
@@ -290,6 +296,41 @@ export async function transitionTicket(_prev: ActionState, formData: FormData): 
         title,
         body,
         ticketId,
+      });
+    }
+
+    // The assigned backup instructor — so they actually know their status.
+    if (action === "assign") {
+      await notifyBackup(f?.assigned_backup_id, {
+        ticketId,
+        title: `👤 You're the backup — ${f?.ticket_no}`,
+        body: `You've been assigned as backup for ${subj} at ${uni} (${f?.mode}). Awaiting Ops confirmation — you'll be notified once it's dispatched.`,
+      });
+    } else if (action === "confirm") {
+      await notifyBackup(f?.assigned_backup_id, {
+        ticketId,
+        title: `✅ Confirmed — you're on for ${f?.ticket_no}`,
+        body: `You're confirmed as the backup for ${subj} at ${uni} (${f?.mode}). Please take the session as scheduled.`,
+      });
+    } else if (action === "to_invoice") {
+      await notifyBackup(f?.assigned_backup_id, {
+        ticketId,
+        type: "invoice",
+        title: `🕒 Upload your invoice — ${f?.ticket_no}`,
+        body: `Please file your claim (NxtClaim link + charge slips) within 24 hours for ${subj} at ${uni}. Late uploads are red-flagged.`,
+      });
+    } else if (action === "ops_approve") {
+      await notifyHod({
+        ticketId,
+        title: `🟢 Awaiting your approval — ${f?.ticket_no}`,
+        body: `Ops approved the claim for ${subj} at ${uni}. It's now in your HOD Approvals queue for final sign-off.`,
+      });
+    } else if (action === "hod_approve") {
+      await notifyBackup(f?.assigned_backup_id, {
+        ticketId,
+        type: "invoice",
+        title: `🏁 Claim approved — ${f?.ticket_no}`,
+        body: `Your claim for ${subj} at ${uni} received final HOD approval.`,
       });
     }
   }

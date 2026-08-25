@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getSessionContext } from "@/lib/auth/session";
 import { createAuthedClient } from "@/lib/supabase/server";
 import { isAdminLike } from "@/lib/auth/roles";
+import { notifyOps, notifyHod, notifyBackup } from "@/lib/notify-targets";
 
 export interface InvoiceState {
   ok?: string;
@@ -54,7 +55,7 @@ export async function submitInvoice(_prev: InvoiceState, formData: FormData): Pr
 
   const { data: ticket } = await supabase
     .from("tickets")
-    .select("id, status, mode, capability_id, assigned_backup_id, invoice_due_at")
+    .select("id, ticket_no, status, mode, capability_id, assigned_backup_id, invoice_due_at, universities(name), subjects(name)")
     .eq("id", ticket_id)
     .maybeSingle();
   if (!ticket) return { error: "Ticket not found." };
@@ -134,6 +135,19 @@ export async function submitInvoice(_prev: InvoiceState, formData: FormData): Pr
     note: late ? "Invoice submitted (late)." : "Invoice submitted.",
   });
 
+  // Alert Ops that a claim is ready for the first (Ops) review.
+  const tk = ticket as unknown as {
+    ticket_no: string;
+    universities: { name: string } | null;
+    subjects: { name: string } | null;
+  };
+  const amountLabel = payload.amount != null ? ` · ₹${payload.amount.toLocaleString("en-IN")}` : "";
+  await notifyOps({
+    ticketId: ticket_id,
+    title: `📄 Invoice filed — ${tk.ticket_no}`,
+    body: `A claim was filed for ${tk.subjects?.name ?? "a subject"} at ${tk.universities?.name ?? "a university"}${amountLabel}${late ? " (late)" : ""}. Ready for Ops review.`,
+  });
+
   revalidatePath(`/dashboard/tickets/${ticket_id}`);
   revalidatePath("/dashboard/invoices");
   return { ok: "Invoice submitted." };
@@ -157,8 +171,19 @@ export async function reviewInvoice(_prev: InvoiceState, formData: FormData): Pr
   const supabase = await createAuthedClient();
 
   // Guard the approval order server-side (client UI order isn't a security boundary).
-  const { data: tk } = await supabase.from("tickets").select("status").eq("id", ticket_id).maybeSingle();
-  const ts = (tk as { status: string } | null)?.status;
+  const { data: tk } = await supabase
+    .from("tickets")
+    .select("status, ticket_no, assigned_backup_id, universities(name), subjects(name)")
+    .eq("id", ticket_id)
+    .maybeSingle();
+  const tkInfo = tk as unknown as {
+    status: string;
+    ticket_no: string;
+    assigned_backup_id: string | null;
+    universities: { name: string } | null;
+    subjects: { name: string } | null;
+  } | null;
+  const ts = tkInfo?.status;
   if (action === "ops" && ts !== "invoice_pending") return { error: "This ticket isn't awaiting Ops approval." };
   if (action === "hod" && ts !== "ops_approved") return { error: "It needs Ops approval before HOD." };
   if (action === "close" && ts !== "hod_approved") return { error: "It needs HOD approval before closing." };
@@ -214,6 +239,31 @@ export async function reviewInvoice(_prev: InvoiceState, formData: FormData): Pr
       from_status: "invoice_pending",
       to_status: "invoice_pending",
       note,
+    });
+  }
+
+  // Notify the next party in the chain.
+  const subj = tkInfo?.subjects?.name ?? "the subject";
+  const uni = tkInfo?.universities?.name ?? "the university";
+  if (action === "ops") {
+    await notifyHod({
+      ticketId: ticket_id,
+      title: `🟢 Awaiting your approval — ${tkInfo?.ticket_no}`,
+      body: `Ops approved the claim for ${subj} at ${uni}. It's in your HOD Approvals queue for final sign-off.`,
+    });
+  } else if (action === "hod") {
+    await notifyBackup(tkInfo?.assigned_backup_id, {
+      ticketId: ticket_id,
+      type: "invoice",
+      title: `🏁 Claim approved — ${tkInfo?.ticket_no}`,
+      body: `Your claim for ${subj} at ${uni} received final HOD approval.`,
+    });
+  } else if (action === "return") {
+    await notifyBackup(tkInfo?.assigned_backup_id, {
+      ticketId: ticket_id,
+      type: "invoice",
+      title: `↩️ Invoice returned — ${tkInfo?.ticket_no}`,
+      body: `Your claim for ${subj} at ${uni} was returned for a fix: ${reason}. Please correct and resubmit.`,
     });
   }
 
