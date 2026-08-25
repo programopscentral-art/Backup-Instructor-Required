@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { UserCog } from "lucide-react";
 import { getSessionContext } from "@/lib/auth/session";
@@ -77,6 +78,18 @@ export default async function AnalyticsPage({
   const from = str(sp.from);
   const to = str(sp.to);
   const university = adminLike ? str(sp.university) : "";
+  const view = str(sp.view) === "budget" ? "budget" : "tickets";
+
+  // Preserve filters when switching tabs.
+  const tabHref = (v: string) => {
+    const p = new URLSearchParams();
+    if (str(sp.granularity)) p.set("granularity", str(sp.granularity));
+    if (from) p.set("from", from);
+    if (to) p.set("to", to);
+    if (university) p.set("university", university);
+    p.set("view", v);
+    return `/dashboard/analytics?${p.toString()}`;
+  };
 
   // RLS-scoped: university_staff only get their campus's tickets automatically.
   const supabase = await createAuthedClient();
@@ -140,6 +153,26 @@ export default async function AnalyticsPage({
     else cur.other += 1;
   }
   const series = [...tsMap.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .slice(-24)
+    .map(([, v]) => v);
+
+  // Budget over time (travel / accommodation / other) for the Budget tab.
+  const bTsMap = new Map<string, { label: string; travel: number; accommodation: number; other: number }>();
+  for (const r of rows) {
+    const inv = invMap.get(r.id);
+    if (!inv || inv.amount <= 0) continue;
+    const b = bucketOf(r.created_at, granularity);
+    let cur = bTsMap.get(b.key);
+    if (!cur) {
+      cur = { label: b.label, travel: 0, accommodation: 0, other: 0 };
+      bTsMap.set(b.key, cur);
+    }
+    cur.travel += inv.travel;
+    cur.accommodation += inv.accommodation;
+    cur.other += inv.other;
+  }
+  const budgetSeries = [...bTsMap.entries()]
     .sort((a, b) => a[0].localeCompare(b[0]))
     .slice(-24)
     .map(([, v]) => v);
@@ -212,9 +245,29 @@ export default async function AnalyticsPage({
     <div>
       <PageHeader
         eyebrow="Analytics"
-        title="Backup ticket analytics"
+        title={view === "budget" ? "Budget analysis" : "Backup ticket analytics"}
         subtitle={`${scopeLabel} · grouped by ${granularity}${from || to ? ` · ${from || "start"} → ${to || "now"}` : ""}`}
       />
+
+      {/* Tab switcher */}
+      <FadeIn className="mb-5">
+        <div className="inline-flex rounded-full border border-[color:var(--line-2)] bg-[color:var(--cream)] p-1">
+          {[
+            { v: "tickets", label: "Backup ticket analytics" },
+            { v: "budget", label: "Budget analysis" },
+          ].map((t) => (
+            <Link
+              key={t.v}
+              href={tabHref(t.v)}
+              className={`rounded-full px-4 py-2 text-[13px] font-semibold transition-colors ${
+                view === t.v ? "bg-white text-[color:var(--accent)] shadow-sm" : "text-[color:var(--muted)]"
+              }`}
+            >
+              {t.label}
+            </Link>
+          ))}
+        </div>
+      </FadeIn>
 
       <FadeIn>
         <AnalyticsFilters
@@ -224,63 +277,85 @@ export default async function AnalyticsPage({
         />
       </FadeIn>
 
-      {/* Clickable KPIs + budget explorer */}
+      {/* Clickable KPIs (+ budget explorer in budget view) */}
       <FadeIn delay={0.05}>
-        <AnalyticsInteractive rows={explorerRows} />
+        <AnalyticsInteractive rows={explorerRows} view={view} />
       </FadeIn>
 
-      {/* Time series with online/offline split */}
-      <FadeIn delay={0.1} className="mt-6">
-        <div className="card p-6">
-          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="font-[family-name:var(--font-display)] text-base font-bold">Tickets over time</h2>
-              <p className="mt-0.5 text-xs text-[color:var(--muted)]">Raised per {granularity} · online vs offline</p>
-            </div>
-            <div className="flex items-center gap-4 text-xs text-[color:var(--muted)]">
-              <Legend color={MODE_COLORS.offline} label="Offline" />
-              <Legend color={MODE_COLORS.online} label="Online" />
-              <Legend color={MODE_COLORS.other} label="Undecided" />
-            </div>
-          </div>
-          <TimeBars series={series} />
-        </div>
-      </FadeIn>
-
-      {/* Breakdowns */}
-      <div className="mt-6 grid gap-6 lg:grid-cols-2">
-        <FadeIn delay={0.15}>
-          <div className="card p-6">
-            <h2 className="mb-5 font-[family-name:var(--font-display)] text-base font-bold">By status</h2>
-            <BarList items={statusItems} total={total} />
-          </div>
-        </FadeIn>
-        <FadeIn delay={0.2}>
-          <div className="card p-6">
-            <h2 className="mb-5 font-[family-name:var(--font-display)] text-base font-bold">By reason</h2>
-            <BarList items={reasonItems} total={total} />
-          </div>
-        </FadeIn>
-        <FadeIn delay={0.25}>
-          <div className="card p-6">
-            <h2 className="mb-1 flex items-center gap-2 font-[family-name:var(--font-display)] text-base font-bold">
-              <UserCog size={16} className="text-[color:var(--accent)]" /> CM workload
-            </h2>
-            <p className="mb-5 text-xs text-[color:var(--muted)]">Tickets per Capability Manager</p>
-            <BarList items={cmItems} total={total} />
-          </div>
-        </FadeIn>
-        {adminLike && (
-          <FadeIn delay={0.3}>
+      {view === "tickets" ? (
+        <>
+          {/* Time series with online/offline split */}
+          <FadeIn delay={0.1} className="mt-6">
             <div className="card p-6">
-              <h2 className="mb-5 flex items-center gap-2 font-[family-name:var(--font-display)] text-base font-bold">
-                By university {university && <span className="pill pill-muted">filtered</span>}
-              </h2>
-              <BarList items={uniItems} total={total} />
+              <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="font-[family-name:var(--font-display)] text-base font-bold">Tickets over time</h2>
+                  <p className="mt-0.5 text-xs text-[color:var(--muted)]">Raised per {granularity} · online vs offline</p>
+                </div>
+                <div className="flex items-center gap-4 text-xs text-[color:var(--muted)]">
+                  <Legend color={MODE_COLORS.offline} label="Offline" />
+                  <Legend color={MODE_COLORS.online} label="Online" />
+                  <Legend color={MODE_COLORS.other} label="Undecided" />
+                </div>
+              </div>
+              <TimeBars series={series} />
             </div>
           </FadeIn>
-        )}
-      </div>
+
+          {/* Breakdowns */}
+          <div className="mt-6 grid gap-6 lg:grid-cols-2">
+            <FadeIn delay={0.15}>
+              <div className="card p-6">
+                <h2 className="mb-5 font-[family-name:var(--font-display)] text-base font-bold">By status</h2>
+                <BarList items={statusItems} total={total} />
+              </div>
+            </FadeIn>
+            <FadeIn delay={0.2}>
+              <div className="card p-6">
+                <h2 className="mb-5 font-[family-name:var(--font-display)] text-base font-bold">By reason</h2>
+                <BarList items={reasonItems} total={total} />
+              </div>
+            </FadeIn>
+            <FadeIn delay={0.25}>
+              <div className="card p-6">
+                <h2 className="mb-1 flex items-center gap-2 font-[family-name:var(--font-display)] text-base font-bold">
+                  <UserCog size={16} className="text-[color:var(--accent)]" /> CM workload
+                </h2>
+                <p className="mb-5 text-xs text-[color:var(--muted)]">Tickets per Capability Manager</p>
+                <BarList items={cmItems} total={total} />
+              </div>
+            </FadeIn>
+            {adminLike && (
+              <FadeIn delay={0.3}>
+                <div className="card p-6">
+                  <h2 className="mb-5 flex items-center gap-2 font-[family-name:var(--font-display)] text-base font-bold">
+                    By university {university && <span className="pill pill-muted">filtered</span>}
+                  </h2>
+                  <BarList items={uniItems} total={total} />
+                </div>
+              </FadeIn>
+            )}
+          </div>
+        </>
+      ) : (
+        /* Budget over time */
+        <FadeIn delay={0.1} className="mt-6">
+          <div className="card p-6">
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="font-[family-name:var(--font-display)] text-base font-bold">Spend over time</h2>
+                <p className="mt-0.5 text-xs text-[color:var(--muted)]">Per {granularity} · travel / accommodation / other</p>
+              </div>
+              <div className="flex items-center gap-4 text-xs text-[color:var(--muted)]">
+                <Legend color={BUDGET_COLORS.travel} label="Travel" />
+                <Legend color={BUDGET_COLORS.accommodation} label="Stay" />
+                <Legend color={BUDGET_COLORS.other} label="Other" />
+              </div>
+            </div>
+            <BudgetBars series={budgetSeries} />
+          </div>
+        </FadeIn>
+      )}
     </div>
   );
 }
@@ -290,6 +365,44 @@ const MODE_COLORS = {
   online: "rgb(4,120,87)",
   other: "rgb(148,163,184)",
 };
+
+const BUDGET_COLORS = {
+  travel: "rgb(37,99,235)",
+  accommodation: "rgb(109,40,217)",
+  other: "rgb(4,120,87)",
+};
+
+const inrShort = (n: number) => {
+  if (n >= 1e5) return `₹${(n / 1e5).toFixed(1)}L`;
+  if (n >= 1e3) return `₹${(n / 1e3).toFixed(1)}k`;
+  return `₹${Math.round(n)}`;
+};
+
+/** Vertical spend bars, stacked by travel / accommodation / other. */
+function BudgetBars({ series }: { series: { label: string; travel: number; accommodation: number; other: number }[] }) {
+  if (series.length === 0) return <p className="text-sm text-[color:var(--faint)]">No spend recorded in this range yet.</p>;
+  const totals = series.map((s) => s.travel + s.accommodation + s.other);
+  const max = Math.max(...totals, 1);
+  return (
+    <div className="flex items-end gap-2 overflow-x-auto pb-1" style={{ height: 200 }}>
+      {series.map((s, i) => {
+        const t = totals[i];
+        const seg = (v: number) => (t > 0 ? (v / t) * (t / max) * 100 : 0);
+        return (
+          <div key={i} className="flex min-w-[32px] flex-1 flex-col items-center gap-1.5">
+            <span className="text-[10px] font-semibold text-[color:var(--ink)]">{inrShort(t)}</span>
+            <div className="flex w-full flex-1 flex-col justify-end" title={`${s.label}: ₹${Math.round(t).toLocaleString("en-IN")} (travel ₹${Math.round(s.travel)}, stay ₹${Math.round(s.accommodation)}, other ₹${Math.round(s.other)})`}>
+              {s.other > 0 && <div className="w-full" style={{ height: `${seg(s.other)}%`, background: BUDGET_COLORS.other }} />}
+              {s.accommodation > 0 && <div className="w-full" style={{ height: `${seg(s.accommodation)}%`, background: BUDGET_COLORS.accommodation }} />}
+              {s.travel > 0 && <div className="w-full rounded-b-md" style={{ height: `${seg(s.travel)}%`, background: BUDGET_COLORS.travel }} />}
+            </div>
+            <span className="whitespace-nowrap text-[10px] text-[color:var(--faint)]">{s.label}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 function Legend({ color, label }: { color: string; label: string }) {
   return (

@@ -15,6 +15,10 @@ import {
   Building2,
   Map as MapIcon,
   User,
+  Plane,
+  BedDouble,
+  Plus,
+  Receipt,
 } from "lucide-react";
 import { STATUS_META, MODE_LABEL, type TicketStatus, type TicketMode } from "@/lib/tickets/status";
 import { fmtIST } from "@/lib/format";
@@ -40,7 +44,16 @@ export interface ARow {
 
 const inr = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`;
 
-export function AnalyticsInteractive({ rows }: { rows: ARow[] }) {
+interface Kpi {
+  label: string;
+  value: string;
+  rows: ARow[];
+  icon: React.ReactNode;
+  rgb: string;
+  hint?: string;
+}
+
+export function AnalyticsInteractive({ rows, view }: { rows: ARow[]; view: "tickets" | "budget" }) {
   const [drill, setDrill] = useState<{ title: string; rows: ARow[] } | null>(null);
 
   const closedRows = rows.filter((r) => r.status === "closed");
@@ -51,9 +64,16 @@ export function AnalyticsInteractive({ rows }: { rows: ARow[] }) {
   const measured = closedRows.filter((r) => r.daysToClose != null);
   const avg = measured.length ? measured.reduce((s, r) => s + (r.daysToClose ?? 0), 0) / measured.length : 0;
   const avgLabel = measured.length ? (avg >= 1 ? `${avg.toFixed(1)}d` : `${Math.round(avg * 24)}h`) : "—";
-  const totalSpend = rows.reduce((s, r) => s + r.amount, 0);
 
-  const kpis = [
+  // Budget stats
+  const spentRows = rows.filter((r) => r.amount > 0);
+  const totalSpend = rows.reduce((s, r) => s + r.amount, 0);
+  const travelSum = rows.reduce((s, r) => s + r.travel, 0);
+  const accomSum = rows.reduce((s, r) => s + r.accommodation, 0);
+  const otherSum = rows.reduce((s, r) => s + r.other, 0);
+  const avgPerClaim = spentRows.length ? totalSpend / spentRows.length : 0;
+
+  const ticketKpis: Kpi[] = [
     { label: "Total tickets", value: String(rows.length), rows, icon: <Ticket size={20} />, rgb: "180,83,9" },
     { label: "Open", value: String(openRows.length), rows: openRows, icon: <FolderOpen size={20} />, rgb: "37,99,235" },
     { label: "Closed", value: String(closedRows.length), rows: closedRows, icon: <CheckCircle2 size={20} />, rgb: "4,120,87" },
@@ -61,6 +81,17 @@ export function AnalyticsInteractive({ rows }: { rows: ARow[] }) {
     { label: "Red flags", value: String(redRows.length), rows: redRows, icon: <AlertTriangle size={20} />, rgb: "225,29,72" },
     { label: "Avg time to close", value: avgLabel, rows: measured, icon: <Timer size={20} />, rgb: "202,138,4", hint: measured.length ? `${measured.length} closed` : undefined },
   ];
+
+  const budgetKpis: Kpi[] = [
+    { label: "Total spend", value: inr(totalSpend), rows: spentRows, icon: <Wallet size={20} />, rgb: "180,83,9" },
+    { label: "Travel", value: inr(travelSum), rows: spentRows.filter((r) => r.travel > 0), icon: <Plane size={20} />, rgb: "37,99,235" },
+    { label: "Accommodation", value: inr(accomSum), rows: spentRows.filter((r) => r.accommodation > 0), icon: <BedDouble size={20} />, rgb: "109,40,217" },
+    { label: "Other", value: inr(otherSum), rows: spentRows.filter((r) => r.other > 0), icon: <Plus size={20} />, rgb: "4,120,87" },
+    { label: "Claims", value: String(spentRows.length), rows: spentRows, icon: <Receipt size={20} />, rgb: "225,29,72" },
+    { label: "Avg / claim", value: inr(avgPerClaim), rows: spentRows, icon: <Timer size={20} />, rgb: "202,138,4" },
+  ];
+
+  const kpis = view === "budget" ? budgetKpis : ticketKpis;
 
   return (
     <>
@@ -89,7 +120,9 @@ export function AnalyticsInteractive({ rows }: { rows: ARow[] }) {
         ))}
       </div>
 
-      <BudgetExplorer rows={rows} totalSpend={totalSpend} onDrill={(title, rs) => setDrill({ title, rows: rs })} />
+      {view === "budget" && (
+        <BudgetExplorer rows={rows} totalSpend={totalSpend} onDrill={(title, rs) => setDrill({ title, rows: rs })} />
+      )}
 
       {drill && <DrillTable title={drill.title} rows={drill.rows} onClose={() => setDrill(null)} />}
     </>
