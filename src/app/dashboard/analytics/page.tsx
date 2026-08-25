@@ -1,14 +1,14 @@
 import { redirect } from "next/navigation";
-import { Ticket, FolderOpen, CheckCircle2, MapPin, AlertTriangle, Timer, UserCog } from "lucide-react";
+import { UserCog } from "lucide-react";
 import { getSessionContext } from "@/lib/auth/session";
 import { createAuthedClient } from "@/lib/supabase/server";
 import { isAdminLike } from "@/lib/auth/roles";
 import { getRefs } from "@/lib/directory/refs";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { StatCard } from "@/components/ui/StatCard";
 import { FadeIn } from "@/components/ui/motion";
 import { STATUS_META, MODE_LABEL, type TicketStatus, type TicketMode } from "@/lib/tickets/status";
 import { AnalyticsFilters } from "./filters";
+import { AnalyticsInteractive } from "./analytics-interactive";
 
 export const dynamic = "force-dynamic";
 
@@ -47,13 +47,16 @@ function bucketOf(iso: string, gran: Gran): { key: string; label: string } {
 
 interface Row {
   id: string;
+  ticket_no: string | null;
   status: TicketStatus;
   mode: TicketMode;
   reason_category: string | null;
   university_id: string | null;
   created_at: string;
   red_flag: boolean | null;
-  universities: { name: string } | null;
+  assigned_backup_name: string | null;
+  universities: { name: string; state: string | null } | null;
+  subjects: { name: string } | null;
   capabilities: { name: string; manager_name: string | null } | null;
 }
 
@@ -79,21 +82,34 @@ export default async function AnalyticsPage({
   const supabase = await createAuthedClient();
   let query = supabase
     .from("tickets")
-    .select("id, status, mode, reason_category, university_id, created_at, red_flag, universities(name), capabilities(name, manager_name)");
+    .select(
+      "id, ticket_no, status, mode, reason_category, university_id, created_at, red_flag, assigned_backup_name, universities(name, state), subjects(name), capabilities(name, manager_name)",
+    );
   if (from) query = query.gte("created_at", from);
   if (to) query = query.lte("created_at", `${to}T23:59:59`);
   if (university) query = query.eq("university_id", university);
   const { data } = await query;
   const rows = (data ?? []) as unknown as Row[];
 
-  // ---- Aggregate ----
+  // Invoice budget per ticket (travel / accommodation / other / total).
+  const invMap = new Map<string, { amount: number; travel: number; accommodation: number; other: number }>();
+  if (rows.length) {
+    const { data: invs } = await supabase
+      .from("invoices")
+      .select("ticket_id, amount, travel_amount, accommodation_amount, other_amount")
+      .in("ticket_id", rows.map((r) => r.id));
+    for (const iv of (invs ?? []) as { ticket_id: string; amount: number | null; travel_amount: number | null; accommodation_amount: number | null; other_amount: number | null }[]) {
+      invMap.set(iv.ticket_id, {
+        amount: iv.amount ?? 0,
+        travel: iv.travel_amount ?? 0,
+        accommodation: iv.accommodation_amount ?? 0,
+        other: iv.other_amount ?? 0,
+      });
+    }
+  }
+
+  // ---- Aggregate (for the charts below; KPIs are computed in the client) ----
   const total = rows.length;
-  const closed = rows.filter((r) => r.status === "closed").length;
-  const cancelled = rows.filter((r) => r.status === "cancelled").length;
-  const open = total - closed - cancelled;
-  const offline = rows.filter((r) => r.mode === "offline").length;
-  const online = rows.filter((r) => r.mode === "online").length;
-  const redFlags = rows.filter((r) => r.red_flag === true).length;
 
   const countBy = <K extends string>(pick: (r: Row) => K | null) => {
     const m = new Map<K, number>();
@@ -130,32 +146,44 @@ export default async function AnalyticsPage({
 
   // Average time-to-close (days) — from the ticket's "closed" event.
   const closedIds = rows.filter((r) => r.status === "closed").map((r) => r.id);
-  let avgDaysToClose = 0;
-  let closedMeasured = 0;
+  const closedAt = new Map<string, string>();
   if (closedIds.length) {
     const { data: evs } = await supabase
       .from("ticket_events")
       .select("ticket_id, created_at")
       .eq("to_status", "closed")
       .in("ticket_id", closedIds);
-    const closedAt = new Map<string, string>();
     for (const e of (evs ?? []) as { ticket_id: string; created_at: string }[]) {
       const cur = closedAt.get(e.ticket_id);
       if (!cur || e.created_at < cur) closedAt.set(e.ticket_id, e.created_at);
     }
-    let totalDays = 0;
-    for (const r of rows) {
-      if (r.status !== "closed") continue;
-      const ca = closedAt.get(r.id);
-      if (!ca) continue;
-      const days = (new Date(ca).getTime() - new Date(r.created_at).getTime()) / 86_400_000;
-      if (days >= 0) {
-        totalDays += days;
-        closedMeasured += 1;
-      }
-    }
-    avgDaysToClose = closedMeasured ? totalDays / closedMeasured : 0;
   }
+
+  // Enriched rows for the interactive KPI drill-downs + budget explorer.
+  const explorerRows = rows.map((r) => {
+    const inv = invMap.get(r.id);
+    const ca = closedAt.get(r.id);
+    const daysToClose =
+      r.status === "closed" && ca ? (new Date(ca).getTime() - new Date(r.created_at).getTime()) / 86_400_000 : null;
+    return {
+      id: r.id,
+      ticket_no: r.ticket_no ?? "—",
+      status: r.status,
+      mode: r.mode,
+      reason: r.reason_category,
+      university: r.universities?.name ?? "—",
+      state: r.universities?.state ?? "Unknown",
+      subject: r.subjects?.name ?? "—",
+      backup: r.assigned_backup_name,
+      created_at: r.created_at,
+      red_flag: r.red_flag === true,
+      amount: inv?.amount ?? 0,
+      travel: inv?.travel ?? 0,
+      accommodation: inv?.accommodation ?? 0,
+      other: inv?.other ?? 0,
+      daysToClose: daysToClose != null && daysToClose >= 0 ? daysToClose : null,
+    };
+  });
 
   const statusItems = (Object.keys(STATUS_META) as TicketStatus[])
     .map((s) => ({ label: STATUS_META[s].label, value: byStatus.get(s) ?? 0 }))
@@ -172,12 +200,6 @@ export default async function AnalyticsPage({
     .map(([label, value]) => ({ label, value }))
     .sort((a, b) => b.value - a.value)
     .slice(0, 10);
-  const avgCloseLabel =
-    closedMeasured > 0
-      ? avgDaysToClose >= 1
-        ? `${avgDaysToClose.toFixed(1)}d`
-        : `${Math.round(avgDaysToClose * 24)}h`
-      : "—";
 
   const refs = adminLike ? await getRefs() : null;
   const scopeLabel = adminLike
@@ -202,20 +224,9 @@ export default async function AnalyticsPage({
         />
       </FadeIn>
 
-      {/* KPIs */}
+      {/* Clickable KPIs + budget explorer */}
       <FadeIn delay={0.05}>
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
-          <StatCard label="Total tickets" value={total} icon={<Ticket size={20} />} accent="accent" />
-          <StatCard label="Open" value={open} icon={<FolderOpen size={20} />} accent="blue" />
-          <StatCard label="Closed" value={closed} icon={<CheckCircle2 size={20} />} accent="emerald" />
-          <StatCard label="Offline" value={offline} icon={<MapPin size={20} />} accent="violet" hint={`${online} online`} />
-          <StatCard label="Red flags" value={redFlags} icon={<AlertTriangle size={20} />} accent="rose" />
-          <MetricCard
-            label="Avg time to close"
-            value={avgCloseLabel}
-            hint={closedMeasured > 0 ? `${closedMeasured} closed` : undefined}
-          />
-        </div>
+        <AnalyticsInteractive rows={explorerRows} />
       </FadeIn>
 
       {/* Time series with online/offline split */}
@@ -286,34 +297,6 @@ function Legend({ color, label }: { color: string; label: string }) {
       <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: color }} />
       {label}
     </span>
-  );
-}
-
-/** StatCard variant that shows a text value (e.g. "2.5d"). */
-function MetricCard({ label, value, hint }: { label: string; value: string; hint?: string }) {
-  const rgb = "180,83,9";
-  return (
-    <div className="card card-hover relative overflow-hidden p-5" style={{ ["--rgb" as string]: rgb }}>
-      <div
-        className="pointer-events-none absolute -right-8 -top-8 h-28 w-28 rounded-full blur-2xl"
-        style={{ background: `rgba(${rgb},0.18)` }}
-      />
-      <div className="flex items-start justify-between">
-        <div
-          className="grid h-11 w-11 place-items-center rounded-xl"
-          style={{ background: `rgba(${rgb},0.14)`, color: `rgb(${rgb})` }}
-        >
-          <Timer size={20} />
-        </div>
-        {hint && <span className="pill pill-muted">{hint}</span>}
-      </div>
-      <div className="mt-4">
-        <div className="font-[family-name:var(--font-display)] text-3xl font-bold tracking-tight" style={{ color: "var(--ink)" }}>
-          {value}
-        </div>
-        <div className="mt-1 text-sm text-[color:var(--muted)]">{label}</div>
-      </div>
-    </div>
   );
 }
 
