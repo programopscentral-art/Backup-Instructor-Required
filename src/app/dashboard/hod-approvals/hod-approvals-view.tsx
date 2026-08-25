@@ -24,6 +24,9 @@ export interface PendingClaim {
   capability: string | null;
   cm: string | null;
   amount: number | null;
+  travel: number | null;
+  accommodation: number | null;
+  other: number | null;
   late: boolean;
   nxtclaimLink: string;
   description: string | null;
@@ -181,6 +184,11 @@ function ClaimCard({ claim: c, onDone }: { claim: PendingClaim; onDone: () => vo
         <div className="text-right">
           <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--faint)]">Amount</p>
           <p className="font-[family-name:var(--font-display)] text-xl font-bold">{inr(c.amount)}</p>
+          {(c.travel != null || c.accommodation != null || c.other != null) && (
+            <p className="mt-0.5 text-[11px] text-[color:var(--faint)]">
+              ✈️ {inr(c.travel ?? 0)} · 🏨 {inr(c.accommodation ?? 0)} · ➕ {inr(c.other ?? 0)}
+            </p>
+          )}
         </div>
       </div>
 

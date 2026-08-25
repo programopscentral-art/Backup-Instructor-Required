@@ -23,7 +23,6 @@ export async function submitInvoice(_prev: InvoiceState, formData: FormData): Pr
   const ticket_id = String(formData.get("ticket_id") || "");
   const session_date = String(formData.get("session_date") || "") || null;
   const description = String(formData.get("description") || "").trim();
-  const amountRaw = String(formData.get("amount") || "").trim();
   const nxtclaim_link = String(formData.get("nxtclaim_link") || "").trim();
   const filesJson = String(formData.get("files") || "[]");
 
@@ -32,11 +31,22 @@ export async function submitInvoice(_prev: InvoiceState, formData: FormData): Pr
   if (!isUrl(nxtclaim_link)) return { error: "Enter a valid NxtClaim URL (https://…)." };
   if (!description) return { error: "Add a short description." };
 
-  // Amount is optional, but if given it must be a real, non-negative number.
-  if (amountRaw) {
-    const amt = Number(amountRaw);
-    if (!Number.isFinite(amt) || amt < 0) return { error: "Enter a valid, non-negative amount." };
+  // Budget breakdown — travel + accommodation + other. Each must be a valid,
+  // non-negative number; the total (amount) is their sum.
+  const parseAmt = (key: string): number | null => {
+    const raw = String(formData.get(key) || "").trim();
+    if (!raw) return 0;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0) return null;
+    return n;
+  };
+  const travel_amount = parseAmt("travel_amount");
+  const accommodation_amount = parseAmt("accommodation_amount");
+  const other_amount = parseAmt("other_amount");
+  if (travel_amount === null || accommodation_amount === null || other_amount === null) {
+    return { error: "Enter valid, non-negative amounts for travel / accommodation / other." };
   }
+  const amount = travel_amount + accommodation_amount + other_amount;
 
   let files: { path: string; name: string }[] = [];
   try {
@@ -45,6 +55,7 @@ export async function submitInvoice(_prev: InvoiceState, formData: FormData): Pr
     files = [];
   }
   if (files.length === 0) return { error: "Upload at least one charge slip / receipt." };
+  if (files.length > 5) return { error: "You can upload at most 5 files." };
   // Every uploaded file must live under this ticket's folder — don't let the
   // client attach an arbitrary bucket path to the invoice.
   if (!files.every((f) => typeof f?.path === "string" && f.path.startsWith(`${ticket_id}/`))) {
@@ -93,7 +104,10 @@ export async function submitInvoice(_prev: InvoiceState, formData: FormData): Pr
   const payload = {
     session_date,
     description,
-    amount: amountRaw ? Number(amountRaw) : null,
+    amount,
+    travel_amount,
+    accommodation_amount,
+    other_amount,
     nxtclaim_link,
     status: "submitted" as const,
     late,

@@ -11,6 +11,9 @@ export interface InvoiceView {
   status: "submitted" | "ops_approved" | "hod_approved" | "returned";
   description: string | null;
   amount: number | null;
+  travel_amount: number | null;
+  accommodation_amount: number | null;
+  other_amount: number | null;
   nxtclaim_link: string;
   late: boolean;
   submitted_by_name: string | null;
@@ -94,6 +97,14 @@ export function InvoicePanel({
         )}
       </div>
 
+      {(invoice.travel_amount != null || invoice.accommodation_amount != null || invoice.other_amount != null) && (
+        <div className="flex flex-wrap gap-3 text-xs text-[color:var(--muted)]">
+          <span>✈️ Travel: <strong className="text-[color:var(--ink)]">₹{(invoice.travel_amount ?? 0).toLocaleString("en-IN")}</strong></span>
+          <span>🏨 Stay: <strong className="text-[color:var(--ink)]">₹{(invoice.accommodation_amount ?? 0).toLocaleString("en-IN")}</strong></span>
+          <span>➕ Other: <strong className="text-[color:var(--ink)]">₹{(invoice.other_amount ?? 0).toLocaleString("en-IN")}</strong></span>
+        </div>
+      )}
+
       {invoice.description && <p className="text-sm text-[color:var(--ink)]">{invoice.description}</p>}
 
       <a
@@ -155,17 +166,30 @@ function WaitingForBackup() {
   );
 }
 
+const MAX_SLIPS = 5;
+
 function SubmitForm({ ticketId, onDone }: { ticketId: string; onDone: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fileNames, setFileNames] = useState<string[]>([]);
+  const [travel, setTravel] = useState("");
+  const [accommodation, setAccommodation] = useState("");
+  const [other, setOther] = useState("");
+
+  const num = (v: string) => (v.trim() && Number.isFinite(Number(v)) ? Number(v) : 0);
+  const total = num(travel) + num(accommodation) + num(other);
 
   async function handle(formData: FormData) {
     setBusy(true);
     setError(null);
     try {
       const supabase = createClient();
-      const input = formData.getAll("slips") as File[];
+      const input = (formData.getAll("slips") as File[]).filter((f) => f && f.size > 0);
+      if (input.length > MAX_SLIPS) {
+        setError(`You can upload at most ${MAX_SLIPS} files.`);
+        setBusy(false);
+        return;
+      }
       const uploaded: { path: string; name: string }[] = [];
       for (const file of input) {
         if (!file || file.size === 0) continue;
@@ -202,14 +226,29 @@ function SubmitForm({ ticketId, onDone }: { ticketId: string; onDone: () => void
         <label className="label">Description *</label>
         <input name="description" required placeholder="e.g. Travel + on-campus session" className="input" />
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="label">Amount (₹)</label>
-          <input name="amount" type="number" step="0.01" placeholder="0.00" className="input" />
+      <div>
+        <label className="label">Session date</label>
+        <input name="session_date" type="date" className="input" />
+      </div>
+      <div>
+        <label className="label">Claim breakdown (₹)</label>
+        <div className="grid grid-cols-3 gap-3">
+          <div>
+            <input name="travel_amount" type="number" min="0" step="0.01" placeholder="Travel" className="input" value={travel} onChange={(e) => setTravel(e.target.value)} />
+            <p className="mt-1 text-center text-[10px] font-semibold uppercase tracking-wide text-[color:var(--faint)]">Travel</p>
+          </div>
+          <div>
+            <input name="accommodation_amount" type="number" min="0" step="0.01" placeholder="Stay" className="input" value={accommodation} onChange={(e) => setAccommodation(e.target.value)} />
+            <p className="mt-1 text-center text-[10px] font-semibold uppercase tracking-wide text-[color:var(--faint)]">Accommodation</p>
+          </div>
+          <div>
+            <input name="other_amount" type="number" min="0" step="0.01" placeholder="Other" className="input" value={other} onChange={(e) => setOther(e.target.value)} />
+            <p className="mt-1 text-center text-[10px] font-semibold uppercase tracking-wide text-[color:var(--faint)]">Other</p>
+          </div>
         </div>
-        <div>
-          <label className="label">Session date</label>
-          <input name="session_date" type="date" className="input" />
+        <div className="mt-2 flex items-center justify-between rounded-lg bg-[color:var(--cream)] px-3 py-2 text-sm">
+          <span className="font-semibold text-[color:var(--muted)]">Total claim</span>
+          <span className="font-[family-name:var(--font-display)] font-bold text-[color:var(--ink)]">₹ {total.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</span>
         </div>
       </div>
       <div>
@@ -217,17 +256,27 @@ function SubmitForm({ ticketId, onDone }: { ticketId: string; onDone: () => void
         <input name="nxtclaim_link" required placeholder="https://nxtclaim…" className="input" />
       </div>
       <div>
-        <label className="label">Charge slips / receipts *</label>
+        <label className="label">Charge slips / receipts * (max {MAX_SLIPS})</label>
         <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-[color:var(--line-2)] bg-[color:var(--cream)] px-3 py-4 text-sm text-[color:var(--muted)] hover:border-[color:var(--accent)]">
           <Upload size={16} />
-          {fileNames.length ? `${fileNames.length} file(s) selected` : "Choose files"}
+          {fileNames.length ? `${fileNames.length} file(s) selected` : `Choose files (up to ${MAX_SLIPS})`}
           <input
             name="slips"
             type="file"
             multiple
             accept="image/*,.pdf"
             className="hidden"
-            onChange={(e) => setFileNames(Array.from(e.target.files ?? []).map((f) => f.name))}
+            onChange={(e) => {
+              const fs = Array.from(e.target.files ?? []);
+              if (fs.length > MAX_SLIPS) {
+                setError(`You can upload at most ${MAX_SLIPS} files.`);
+                e.target.value = "";
+                setFileNames([]);
+                return;
+              }
+              setError(null);
+              setFileNames(fs.map((f) => f.name));
+            }}
           />
         </label>
         {fileNames.length > 0 && (

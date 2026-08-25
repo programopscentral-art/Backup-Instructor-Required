@@ -11,6 +11,9 @@ export const dynamic = "force-dynamic";
 interface RawPending {
   id: string;
   amount: number | null;
+  travel_amount: number | null;
+  accommodation_amount: number | null;
+  other_amount: number | null;
   late: boolean;
   nxtclaim_link: string;
   description: string | null;
@@ -50,7 +53,7 @@ export default async function HodApprovalsPage() {
   const { data: rows } = await supabase
     .from("invoices")
     .select(
-      "id, amount, late, nxtclaim_link, description, session_date, submitted_by_name, ops_approved_at, tickets(id, ticket_no, universities(name), subjects(name), capabilities(name, manager_name))",
+      "id, amount, travel_amount, accommodation_amount, other_amount, late, nxtclaim_link, description, session_date, submitted_by_name, ops_approved_at, tickets(id, ticket_no, universities(name), subjects(name), capabilities(name, manager_name))",
     )
     .eq("status", "ops_approved")
     .order("ops_approved_at", { ascending: true });
@@ -82,6 +85,9 @@ export default async function HodApprovalsPage() {
     capability: r.tickets?.capabilities?.name ?? null,
     cm: r.tickets?.capabilities?.manager_name ?? null,
     amount: r.amount,
+    travel: r.travel_amount,
+    accommodation: r.accommodation_amount,
+    other: r.other_amount,
     late: r.late,
     nxtclaimLink: r.nxtclaim_link,
     description: r.description,
