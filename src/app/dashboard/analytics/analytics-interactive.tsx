@@ -295,11 +295,22 @@ function BudgetExplorer({
 // them, and the budget spent — the end-to-end absence view.
 
 function AbsenceExplorer({ rows, onDrill }: { rows: ARow[]; onDrill: (title: string, rows: ARow[]) => void }) {
+  const [mode, setMode] = useState<"tree" | "top">("tree");
   const [openState, setOpenState] = useState<string | null>(null);
   const [openUni, setOpenUni] = useState<string | null>(null);
 
   const states = useMemo(() => group(rows, (r) => r.state).sort((a, b) => b.count - a.count), [rows]);
   const maxCount = Math.max(...states.map((g) => g.count), 1);
+
+  // Flat ranking of absent instructors across all states/universities (top 30).
+  const topAbsentees = useMemo(
+    () =>
+      group(rows.filter((r) => r.absent), (r) => `${r.absent}||${r.university}`)
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 30),
+    [rows],
+  );
+  const maxTop = Math.max(...topAbsentees.map((g) => g.count), 1);
 
   if (rows.length === 0) {
     return (
@@ -311,12 +322,61 @@ function AbsenceExplorer({ rows, onDrill }: { rows: ARow[]; onDrill: (title: str
 
   return (
     <div className="card mt-6 p-6">
-      <h2 className="mb-1 flex items-center gap-2 font-[family-name:var(--font-display)] text-base font-bold">
-        <MapIcon size={17} className="text-[color:var(--accent)]" /> Absence &amp; coverage
-      </h2>
-      <p className="mb-4 text-xs text-[color:var(--muted)]">
-        State → University → Instructor · who&apos;s absent most, who covered, and the spend.
-      </p>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="flex items-center gap-2 font-[family-name:var(--font-display)] text-base font-bold">
+            <MapIcon size={17} className="text-[color:var(--accent)]" /> Absence &amp; coverage
+          </h2>
+          <p className="mt-0.5 text-xs text-[color:var(--muted)]">Who&apos;s absent most, who covered, and the spend.</p>
+        </div>
+        <div className="inline-flex rounded-full border border-[color:var(--line-2)] bg-[color:var(--cream)] p-1">
+          <button onClick={() => setMode("tree")} className={`rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors ${mode === "tree" ? "bg-white text-[color:var(--accent)] shadow-sm" : "text-[color:var(--muted)]"}`}>
+            State → Uni → Instructor
+          </button>
+          <button onClick={() => setMode("top")} className={`rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors ${mode === "top" ? "bg-white text-[color:var(--accent)] shadow-sm" : "text-[color:var(--muted)]"}`}>
+            Top absentees
+          </button>
+        </div>
+      </div>
+
+      {mode === "top" ? (
+        <ol className="space-y-1.5">
+          {topAbsentees.length === 0 ? (
+            <p className="text-sm text-[color:var(--faint)]">No absences recorded in this range.</p>
+          ) : (
+            topAbsentees.map((g, i) => {
+              const r0 = g.rows[0];
+              const backups = [...new Set(g.rows.map((r) => r.backup).filter(Boolean))] as string[];
+              return (
+                <li key={g.key}>
+                  <button
+                    onClick={() => onDrill(`${r0.absent} · ${r0.university}`, g.rows)}
+                    className="flex w-full items-center gap-3 rounded-xl border border-[color:var(--line-2)] px-3.5 py-2.5 text-left transition-colors hover:bg-[color:var(--cream)]"
+                  >
+                    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[color:var(--accent-soft)] text-xs font-bold text-[color:var(--accent)]">{i + 1}</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate text-sm font-semibold text-[color:var(--ink)]">{r0.absent}</span>
+                        <span className="shrink-0 text-sm font-bold">
+                          {g.count} <span className="text-xs font-normal text-[color:var(--faint)]">absent</span>
+                        </span>
+                      </div>
+                      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[color:var(--cream-2)]">
+                        <div className="h-full rounded-full" style={{ width: `${(g.count / maxTop) * 100}%`, background: "var(--accent)" }} />
+                      </div>
+                      <p className="mt-1 truncate text-[11px] text-[color:var(--faint)]">
+                        {r0.university} · {r0.state}
+                        {backups.length ? ` · covered by ${backups.join(", ")}` : ""}
+                        {g.amount > 0 ? ` · ${inr(g.amount)}` : ""}
+                      </p>
+                    </div>
+                  </button>
+                </li>
+              );
+            })
+          )}
+        </ol>
+      ) : (
       <ul className="space-y-2">
         {states.map((st) => {
           const stOpen = openState === st.key;
@@ -400,6 +460,7 @@ function AbsenceExplorer({ rows, onDrill }: { rows: ARow[]; onDrill: (title: str
           );
         })}
       </ul>
+      )}
     </div>
   );
 }
@@ -435,6 +496,7 @@ function DrillTable({ title, rows, onClose }: { title: string; rows: ARow[]; onC
                 <tr className="border-b border-[color:var(--line-2)] text-left text-[11px] uppercase tracking-wide text-[color:var(--faint)]">
                   <th className="px-4 py-2.5 font-semibold">Ticket</th>
                   <th className="px-2 py-2.5 font-semibold">Subject · University</th>
+                  <th className="px-2 py-2.5 font-semibold">Absent</th>
                   <th className="px-2 py-2.5 font-semibold">Status</th>
                   <th className="px-2 py-2.5 font-semibold">Mode</th>
                   <th className="px-2 py-2.5 font-semibold">Backup</th>
@@ -454,6 +516,7 @@ function DrillTable({ title, rows, onClose }: { title: string; rows: ARow[]; onC
                       <span className="block truncate">{r.subject}</span>
                       <span className="block truncate text-xs text-[color:var(--faint)]">{r.university}</span>
                     </td>
+                    <td className="px-2 py-2.5 text-[color:var(--muted)]">{r.absent ?? "—"}</td>
                     <td className="px-2 py-2.5">
                       <span className={`pill ${STATUS_META[r.status]?.pill ?? "pill-muted"}`}>{STATUS_META[r.status]?.label ?? r.status}</span>
                     </td>
