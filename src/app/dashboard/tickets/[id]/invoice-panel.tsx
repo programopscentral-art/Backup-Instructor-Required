@@ -292,7 +292,7 @@ function SubmitForm({ ticketId, onDone }: { ticketId: string; onDone: () => void
         <input name="description" required placeholder="e.g. Travel + on-campus session" className="input" />
       </div>
       <div>
-        <label className="label">Session date</label>
+        <label className="label">Session end date</label>
         <input name="session_date" type="date" className="input" />
       </div>
       <div>

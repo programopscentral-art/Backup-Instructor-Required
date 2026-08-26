@@ -15,7 +15,7 @@ interface InvoiceRow {
   tickets: {
     id: string;
     ticket_no: string;
-    universities: { name: string } | null;
+    universities: { name: string; state: string | null } | null;
     subjects: { name: string } | null;
   } | null;
 }
@@ -34,7 +34,7 @@ export default async function InvoicesPage() {
     supabase
       .from("invoices")
       .select(
-        "id, status, amount, late, submitted_by_name, submitted_at, tickets(id, ticket_no, universities(name), subjects(name))",
+        "id, status, amount, late, submitted_by_name, submitted_at, tickets(id, ticket_no, universities(name, state), subjects(name))",
       )
       .order("submitted_at", { ascending: false }),
     supabase
@@ -112,6 +112,7 @@ export default async function InvoicesPage() {
               ticket_id: i.tickets?.id ?? null,
               ticket_no: i.tickets?.ticket_no ?? null,
               university: i.tickets?.universities?.name ?? null,
+              state: i.tickets?.universities?.state ?? null,
               subject: i.tickets?.subjects?.name ?? null,
             }))}
           />
