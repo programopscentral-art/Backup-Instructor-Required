@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { buildTeamsCard, postToTeams, type TeamsEvent } from "@/lib/teams";
+import { buildTeamsCard, buildReminderCard, postToTeams, type TeamsEvent } from "@/lib/teams";
 
 export const dynamic = "force-dynamic";
 
@@ -39,19 +39,67 @@ export async function POST(req: Request) {
   const webhook = (cfg?.teams_webhook_url as string | null) ?? process.env.TEAMS_WEBHOOK_URL ?? null;
   if (!webhook) return NextResponse.json({ ok: true, skipped: "no webhook configured" });
 
-  let eventId = "";
+  const base = process.env.NEXT_PUBLIC_SITE_URL ?? "https://backup-instructor-required.vercel.app";
+
+  let body: { event_id?: string; reminder?: boolean; ticket_id?: string };
   try {
-    const body = (await req.json()) as { event_id?: string };
-    eventId = String(body.event_id ?? "");
+    body = (await req.json()) as { event_id?: string; reminder?: boolean; ticket_id?: string };
   } catch {
     return NextResponse.json({ ok: false, error: "invalid json" }, { status: 400 });
   }
+
+  // ---- Invoice reminder path (from the send_invoice_reminders cron) ----
+  if (body.reminder && body.ticket_id) {
+    const { data: tk } = await db
+      .from("tickets")
+      .select(
+        "ticket_no, mode, assigned_backup_name, absent_instructor_name, absent_from, absent_to, time_from, time_to, invoice_due_at, universities(name), subjects(name), capabilities(manager_name)",
+      )
+      .eq("id", body.ticket_id)
+      .maybeSingle();
+    if (!tk) return NextResponse.json({ ok: false, error: "ticket not found" }, { status: 404 });
+    const rt = tk as unknown as {
+      ticket_no: string;
+      mode: string | null;
+      assigned_backup_name: string | null;
+      absent_instructor_name: string | null;
+      absent_from: string | null;
+      absent_to: string | null;
+      time_from: string | null;
+      time_to: string | null;
+      invoice_due_at: string | null;
+      universities: { name: string } | null;
+      subjects: { name: string } | null;
+      capabilities: { manager_name: string | null } | null;
+    };
+    const sentR = await postToTeams(
+      webhook,
+      buildReminderCard({
+        ticketNo: rt.ticket_no,
+        university: rt.universities?.name ?? null,
+        subject: rt.subjects?.name ?? null,
+        capabilityManager: rt.capabilities?.manager_name ?? null,
+        absentInstructor: rt.absent_instructor_name,
+        backup: rt.assigned_backup_name,
+        mode: rt.mode,
+        absentFrom: rt.absent_from,
+        absentTo: rt.absent_to,
+        timeFrom: rt.time_from,
+        timeTo: rt.time_to,
+        dueAt: rt.invoice_due_at,
+        ticketUrl: `${base}/dashboard/tickets/${body.ticket_id}`,
+      }),
+    );
+    return NextResponse.json({ ok: sentR });
+  }
+
+  const eventId = String(body.event_id ?? "");
   if (!eventId) return NextResponse.json({ ok: false, error: "missing event_id" }, { status: 400 });
 
   const { data: ev } = await db
     .from("ticket_events")
     .select(
-      "id, from_status, to_status, note, actor_name, teams_sent_at, ticket_id, tickets(ticket_no, mode, assigned_backup_name, absent_instructor_name, universities(name), subjects(name))",
+      "id, from_status, to_status, note, actor_name, teams_sent_at, ticket_id, tickets(ticket_no, mode, assigned_backup_name, absent_instructor_name, universities(name), subjects(name), capabilities(manager_name))",
     )
     .eq("id", eventId)
     .maybeSingle();
@@ -66,6 +114,7 @@ export async function POST(req: Request) {
     absent_instructor_name: string | null;
     universities: { name: string } | null;
     subjects: { name: string } | null;
+    capabilities: { manager_name: string | null } | null;
   } | null;
 
   // Amount is only relevant for invoice-stage cards — fetch it lazily.
@@ -75,7 +124,6 @@ export async function POST(req: Request) {
     amount = (inv as { amount: number | null } | null)?.amount ?? null;
   }
 
-  const base = process.env.NEXT_PUBLIC_SITE_URL ?? "https://backup-instructor-required.vercel.app";
   const payload: TeamsEvent = {
     ticketNo: t?.ticket_no ?? "—",
     fromStatus: ev.from_status,
@@ -84,6 +132,7 @@ export async function POST(req: Request) {
     actorName: ev.actor_name,
     university: t?.universities?.name ?? null,
     subject: t?.subjects?.name ?? null,
+    capabilityManager: t?.capabilities?.manager_name ?? null,
     backup: t?.assigned_backup_name ?? null,
     mode: t?.mode ?? null,
     absentInstructor: t?.absent_instructor_name ?? null,

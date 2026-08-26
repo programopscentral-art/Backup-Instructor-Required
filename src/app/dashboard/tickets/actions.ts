@@ -176,7 +176,7 @@ export async function transitionTicket(_prev: ActionState, formData: FormData): 
   const supabase = await createAuthedClient();
   const { data: ticket } = await supabase
     .from("tickets")
-    .select("id, status, mode, capability_id")
+    .select("id, status, mode, capability_id, absent_to")
     .eq("id", ticketId)
     .maybeSingle();
   if (!ticket) return { error: "Ticket not found." };
@@ -232,9 +232,13 @@ export async function transitionTicket(_prev: ActionState, formData: FormData): 
     }
     to = step.to;
     if (action === "confirm") update.confirmed_by = ctx.userId;
-    // Start the 24-hour invoice SLA clock when going offline → invoice.
+    // Invoice window opens at 4 PM IST on the absent END date and runs +24h.
+    // (Reminders start at that 4 PM and repeat every 5h until the claim is filed.)
     if (action === "to_invoice") {
-      update.invoice_due_at = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const at = (ticket as { absent_to: string | null }).absent_to;
+      const openAt = at ? new Date(`${at}T16:00:00+05:30`) : new Date();
+      const dueAt = new Date(openAt.getTime() + 24 * 60 * 60 * 1000);
+      update.invoice_due_at = dueAt.toISOString();
     }
     update.status = to;
   }
