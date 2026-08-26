@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, FileText, ExternalLink, AlertTriangle, Check } from "lucide-react";
+import { Upload, FileText, ExternalLink, AlertTriangle, Check, Lock, ShieldCheck } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { submitInvoice, reviewInvoice } from "@/app/dashboard/invoices/actions";
+import { submitInvoice, reviewInvoice, reopenInvoiceUpload } from "@/app/dashboard/invoices/actions";
 
 export interface InvoiceView {
   id: string;
@@ -33,6 +33,7 @@ export function InvoicePanel({
   ticketId,
   ticketStatus,
   overdue,
+  windowClosed,
   invoice,
   canUpload,
   perms,
@@ -40,6 +41,7 @@ export function InvoicePanel({
   ticketId: string;
   ticketStatus: string;
   overdue: boolean;
+  windowClosed: boolean;
   invoice: InvoiceView | null;
   canUpload: boolean;
   perms: { isAdmin: boolean; isHod: boolean };
@@ -47,6 +49,42 @@ export function InvoicePanel({
   const router = useRouter();
 
   if (!invoice) {
+    // Window closed → the backup is locked out; an admin must re-open it.
+    if (windowClosed) {
+      return (
+        <div className="space-y-4">
+          {perms.isAdmin ? (
+            <>
+              <div className="flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-3 text-sm text-[color:var(--amber,#b45309)]">
+                <Lock size={17} className="mt-0.5 flex-none" />
+                <span>
+                  <strong>Upload window closed.</strong> The 24-hour window passed, so the backup can&apos;t upload.
+                  Approve to re-open their upload, or file it yourself below.
+                </span>
+              </div>
+              <ReopenButton ticketId={ticketId} onDone={() => router.refresh()} />
+              <div className="flex items-center gap-3 text-xs text-[color:var(--faint)]">
+                <span className="h-px flex-1 bg-[color:var(--line-2)]" /> or file it yourself <span className="h-px flex-1 bg-[color:var(--line-2)]" />
+              </div>
+              <SubmitForm ticketId={ticketId} onDone={() => router.refresh()} />
+            </>
+          ) : canUpload ? (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3.5 text-sm text-[color:var(--amber,#b45309)]">
+              <p className="flex items-center gap-2 font-semibold">
+                <Lock size={15} /> Upload locked — 24-hour window closed
+              </p>
+              <p className="mt-1.5">
+                Please contact your <strong>Admin</strong> along with your <strong>Capability Manager</strong>.
+                Once they approve, you&apos;ll be able to upload your claim here.
+              </p>
+            </div>
+          ) : (
+            <WaitingForBackup />
+          )}
+        </div>
+      );
+    }
+
     return (
       <div className="space-y-4">
         {overdue && (
@@ -147,6 +185,33 @@ export function InvoicePanel({
         perms={perms}
         onDone={() => router.refresh()}
       />
+    </div>
+  );
+}
+
+/** Admin approves a late upload — re-opens the window for the backup. */
+function ReopenButton({ ticketId, onDone }: { ticketId: string; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function run() {
+    setBusy(true);
+    setError(null);
+    const fd = new FormData();
+    fd.set("ticket_id", ticketId);
+    const res = await reopenInvoiceUpload({}, fd);
+    if (res.error) {
+      setError(res.error);
+      setBusy(false);
+      return;
+    }
+    onDone();
+  }
+  return (
+    <div>
+      <button onClick={run} disabled={busy} className="btn btn-primary w-full gap-1.5">
+        <ShieldCheck size={16} /> {busy ? "Approving…" : "Approve late upload (re-open for backup)"}
+      </button>
+      {error && <p className="mt-2 text-sm text-[color:var(--rose)]">{error}</p>}
     </div>
   );
 }

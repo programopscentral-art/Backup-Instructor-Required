@@ -130,6 +130,16 @@ export default async function TicketDetailPage({
       !!ticket.invoice_due_at &&
       new Date() > new Date(ticket.invoice_due_at));
 
+  // After the 24h window the backup's upload is locked until an admin re-opens it.
+  const reopened = !!ticket.invoice_reopened_at;
+  const windowClosed =
+    mode === "offline" &&
+    status === "invoice_pending" &&
+    !invoiceRow &&
+    !!ticket.invoice_due_at &&
+    Date.now() > new Date(ticket.invoice_due_at).getTime() &&
+    !reopened;
+
   const invoiceStage = ["invoice_pending", "ops_approved", "hod_approved"].includes(status);
   const showInvoice = mode === "offline" && (invoiceStage || !!invoiceRow);
 
@@ -369,6 +379,7 @@ export default async function TicketDetailPage({
                 ticketId={ticket.id}
                 ticketStatus={status}
                 overdue={overdue}
+                windowClosed={windowClosed}
                 invoice={invoiceView}
                 canUpload={canUpload}
                 perms={{ isAdmin: perms.isAdmin, isHod: perms.isHod }}

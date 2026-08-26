@@ -66,7 +66,7 @@ export async function submitInvoice(_prev: InvoiceState, formData: FormData): Pr
 
   const { data: ticket } = await supabase
     .from("tickets")
-    .select("id, ticket_no, status, mode, capability_id, assigned_backup_id, invoice_due_at, universities(name), subjects(name)")
+    .select("id, ticket_no, status, mode, capability_id, assigned_backup_id, invoice_due_at, invoice_reopened_at, universities(name), subjects(name)")
     .eq("id", ticket_id)
     .maybeSingle();
   if (!ticket) return { error: "Ticket not found." };
@@ -98,6 +98,16 @@ export async function submitInvoice(_prev: InvoiceState, formData: FormData): Pr
   // 3-red-flag lock — the instructor is blocked until an Admin resets it (Ops/CM can still file).
   if (!adminLike && isTheBackup && bpBlocked) {
     return { error: "Invoice upload is locked — you've reached 3 red flags. Ask an Admin/CM to reset your flags before submitting." };
+  }
+
+  // 24h window lock — after the deadline the backup can't upload until an Admin
+  // re-opens it. Admin/HOD are unaffected.
+  const dueMs = ticket.invoice_due_at ? new Date(ticket.invoice_due_at).getTime() : null;
+  const reopened = !!(ticket as { invoice_reopened_at: string | null }).invoice_reopened_at;
+  if (!adminLike && isTheBackup && dueMs != null && Date.now() > dueMs && !reopened) {
+    return {
+      error: "The 24-hour window has closed. Please contact your Admin / Capability Manager — once they approve, you can upload here.",
+    };
   }
 
   const late = ticket.invoice_due_at ? new Date() > new Date(ticket.invoice_due_at) : false;
@@ -284,4 +294,63 @@ export async function reviewInvoice(_prev: InvoiceState, formData: FormData): Pr
   revalidatePath(`/dashboard/tickets/${ticket_id}`);
   revalidatePath("/dashboard/invoices");
   return { ok: note };
+}
+
+/**
+ * Admin/HOD re-opens the upload after the 24h window closed, so the backup can
+ * file a late claim. Logs the event (flows to Teams) and notifies the backup.
+ */
+export async function reopenInvoiceUpload(_prev: InvoiceState, formData: FormData): Promise<InvoiceState> {
+  const ctx = await getSessionContext();
+  if (!ctx) return { error: "Not signed in." };
+  if (!isAdminLike(ctx.roles)) return { error: "Only Ops/HOD can re-open uploads." };
+
+  const ticket_id = String(formData.get("ticket_id") || "");
+  if (!ticket_id) return { error: "Missing ticket." };
+
+  const supabase = await createAuthedClient();
+  const { data: tk } = await supabase
+    .from("tickets")
+    .select("ticket_no, status, assigned_backup_id, invoice_reopened_at, universities(name), subjects(name)")
+    .eq("id", ticket_id)
+    .maybeSingle();
+  const t = tk as unknown as {
+    ticket_no: string;
+    status: string;
+    assigned_backup_id: string | null;
+    invoice_reopened_at: string | null;
+    universities: { name: string } | null;
+    subjects: { name: string } | null;
+  } | null;
+  if (!t) return { error: "Ticket not found." };
+  if (t.status !== "invoice_pending") return { error: "This ticket isn't in the invoice stage." };
+  if (t.invoice_reopened_at) return { ok: "Upload is already re-opened." };
+
+  const { error } = await supabase
+    .from("tickets")
+    .update({ invoice_reopened_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("id", ticket_id);
+  if (error) return { error: error.message };
+
+  const actorName = ctx.profile?.full_name || ctx.email;
+  await supabase.from("ticket_events").insert({
+    ticket_id,
+    actor_id: ctx.userId,
+    actor_name: actorName,
+    from_status: "invoice_pending",
+    to_status: "invoice_pending",
+    note: "✅ Late invoice upload re-opened by admin.",
+  });
+
+  const subj = t.subjects?.name ?? "the subject";
+  const uni = t.universities?.name ?? "the university";
+  await notifyBackup(t.assigned_backup_id, {
+    ticketId: ticket_id,
+    type: "invoice",
+    title: `✅ Upload re-opened — ${t.ticket_no}`,
+    body: `An admin re-opened your invoice upload for ${subj} at ${uni}. You can now file your claim in Backup OS.`,
+  });
+
+  revalidatePath(`/dashboard/tickets/${ticket_id}`);
+  return { ok: "Upload re-opened for the backup." };
 }
