@@ -1,9 +1,30 @@
 import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { buildTeamsCard, buildReminderCard, postToTeams, type TeamsEvent } from "@/lib/teams";
+import { buildTeamsCard, buildReminderCard, postToTeams, type TeamsEvent, type Mention } from "@/lib/teams";
 
 export const dynamic = "force-dynamic";
+
+type DB = ReturnType<typeof createAdminClient>;
+
+/** The assigned backup as an @mention (only if their email is on file). */
+async function backupMention(db: DB, backupId: string | null): Promise<Mention[]> {
+  if (!backupId) return [];
+  const { data } = await db.from("backup_instructor_pool").select("instructor_name, email").eq("id", backupId).maybeSingle();
+  const r = data as { instructor_name: string; email: string | null } | null;
+  return r?.email ? [{ name: r.instructor_name, email: r.email }] : [];
+}
+
+/** Everyone holding a given role, as @mentions (only those with an email). */
+async function roleMentions(db: DB, roles: string[]): Promise<Mention[]> {
+  const { data: ras } = await db.from("role_assignments").select("user_id").in("role", roles);
+  const ids = [...new Set(((ras ?? []) as { user_id: string }[]).map((r) => r.user_id))];
+  if (!ids.length) return [];
+  const { data: profs } = await db.from("profiles").select("full_name, email").in("id", ids);
+  return ((profs ?? []) as { full_name: string | null; email: string | null }[])
+    .filter((p) => p.email)
+    .map((p) => ({ name: p.full_name || (p.email as string), email: p.email as string }));
+}
 
 /**
  * Teams dispatch — called by the ticket_events DB trigger (pg_net) with
@@ -53,7 +74,7 @@ export async function POST(req: Request) {
     const { data: tk } = await db
       .from("tickets")
       .select(
-        "ticket_no, mode, assigned_backup_name, absent_instructor_name, absent_from, absent_to, time_from, time_to, invoice_due_at, universities(name), subjects(name), capabilities(manager_name)",
+        "ticket_no, mode, assigned_backup_id, assigned_backup_name, absent_instructor_name, absent_from, absent_to, time_from, time_to, invoice_due_at, universities(name), subjects(name), capabilities(manager_name)",
       )
       .eq("id", body.ticket_id)
       .maybeSingle();
@@ -61,6 +82,7 @@ export async function POST(req: Request) {
     const rt = tk as unknown as {
       ticket_no: string;
       mode: string | null;
+      assigned_backup_id: string | null;
       assigned_backup_name: string | null;
       absent_instructor_name: string | null;
       absent_from: string | null;
@@ -88,6 +110,7 @@ export async function POST(req: Request) {
         timeTo: rt.time_to,
         dueAt: rt.invoice_due_at,
         ticketUrl: `${base}/dashboard/tickets/${body.ticket_id}`,
+        mentions: await backupMention(db, rt.assigned_backup_id), // ping the backup
       }),
     );
     return NextResponse.json({ ok: sentR });
@@ -99,7 +122,7 @@ export async function POST(req: Request) {
   const { data: ev } = await db
     .from("ticket_events")
     .select(
-      "id, from_status, to_status, note, actor_name, teams_sent_at, ticket_id, tickets(ticket_no, mode, assigned_backup_name, absent_instructor_name, universities(name), subjects(name), capabilities(manager_name))",
+      "id, from_status, to_status, note, actor_name, teams_sent_at, ticket_id, tickets(ticket_no, mode, assigned_backup_id, assigned_backup_name, absent_instructor_name, universities(name), subjects(name), capabilities(manager_name, manager_email))",
     )
     .eq("id", eventId)
     .maybeSingle();
@@ -110,12 +133,31 @@ export async function POST(req: Request) {
   const t = ev.tickets as unknown as {
     ticket_no: string;
     mode: string | null;
+    assigned_backup_id: string | null;
     assigned_backup_name: string | null;
     absent_instructor_name: string | null;
     universities: { name: string } | null;
     subjects: { name: string } | null;
-    capabilities: { manager_name: string | null } | null;
+    capabilities: { manager_name: string | null; manager_email: string | null } | null;
   } | null;
+
+  // Who is @mentioned on this card (email present → real ping; else omitted).
+  let mentions: Mention[] = [];
+  const noteL = (ev.note || "").toLowerCase();
+  if (ev.to_status === "raised") {
+    mentions = t?.capabilities?.manager_email
+      ? [{ name: t.capabilities.manager_name || t.capabilities.manager_email, email: t.capabilities.manager_email }]
+      : [];
+  } else if (ev.to_status === "backup_assigned" || ev.to_status === "confirmed" || ev.to_status === "hod_approved") {
+    mentions = await backupMention(db, t?.assigned_backup_id ?? null);
+  } else if (ev.to_status === "ops_approved") {
+    mentions = await roleMentions(db, ["hod", "admin"]);
+  } else if (ev.to_status === "invoice_pending") {
+    // invoice filed → Ops; reminder / red flag / returned / to-invoice → the backup
+    mentions = noteL.includes("invoice submitted")
+      ? await roleMentions(db, ["admin"])
+      : await backupMention(db, t?.assigned_backup_id ?? null);
+  }
 
   // Amount is only relevant for invoice-stage cards — fetch it lazily.
   let amount: number | null = null;
@@ -138,6 +180,7 @@ export async function POST(req: Request) {
     absentInstructor: t?.absent_instructor_name ?? null,
     amount,
     ticketUrl: `${base}/dashboard/tickets/${ev.ticket_id}`,
+    mentions,
   };
 
   const sent = await postToTeams(webhook, buildTeamsCard(payload));
