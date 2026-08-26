@@ -32,6 +32,7 @@ export interface ARow {
   university: string;
   state: string;
   subject: string;
+  absent: string | null;
   backup: string | null;
   created_at: string;
   red_flag: boolean;
@@ -120,8 +121,10 @@ export function AnalyticsInteractive({ rows, view }: { rows: ARow[]; view: "tick
         ))}
       </div>
 
-      {view === "budget" && (
+      {view === "budget" ? (
         <BudgetExplorer rows={rows} totalSpend={totalSpend} onDrill={(title, rs) => setDrill({ title, rows: rs })} />
+      ) : (
+        <AbsenceExplorer rows={rows} onDrill={(title, rs) => setDrill({ title, rows: rs })} />
       )}
 
       {drill && <DrillTable title={drill.title} rows={drill.rows} onClose={() => setDrill(null)} />}
@@ -283,6 +286,120 @@ function BudgetExplorer({
           })}
         </ul>
       )}
+    </div>
+  );
+}
+
+/* ---------------- Absence & coverage explorer (tickets tab) ---------------- */
+// State → University → Absent instructor. Shows who's absent most, who covered
+// them, and the budget spent — the end-to-end absence view.
+
+function AbsenceExplorer({ rows, onDrill }: { rows: ARow[]; onDrill: (title: string, rows: ARow[]) => void }) {
+  const [openState, setOpenState] = useState<string | null>(null);
+  const [openUni, setOpenUni] = useState<string | null>(null);
+
+  const states = useMemo(() => group(rows, (r) => r.state).sort((a, b) => b.count - a.count), [rows]);
+  const maxCount = Math.max(...states.map((g) => g.count), 1);
+
+  if (rows.length === 0) {
+    return (
+      <div className="card mt-6 p-6">
+        <p className="text-sm text-[color:var(--faint)]">No tickets in this range.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card mt-6 p-6">
+      <h2 className="mb-1 flex items-center gap-2 font-[family-name:var(--font-display)] text-base font-bold">
+        <MapIcon size={17} className="text-[color:var(--accent)]" /> Absence &amp; coverage
+      </h2>
+      <p className="mb-4 text-xs text-[color:var(--muted)]">
+        State → University → Instructor · who&apos;s absent most, who covered, and the spend.
+      </p>
+      <ul className="space-y-2">
+        {states.map((st) => {
+          const stOpen = openState === st.key;
+          const unis = group(st.rows, (r) => r.university).sort((a, b) => b.count - a.count);
+          return (
+            <li key={st.key} className="rounded-xl border border-[color:var(--line-2)]">
+              <button
+                onClick={() => {
+                  setOpenState(stOpen ? null : st.key);
+                  setOpenUni(null);
+                }}
+                className="flex w-full items-center gap-3 px-3.5 py-3 text-left"
+              >
+                <ChevronRight size={16} className="shrink-0 text-[color:var(--faint)] transition-transform" style={{ transform: stOpen ? "rotate(90deg)" : "none" }} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-sm font-bold text-[color:var(--ink)]">{st.key}</span>
+                    <span className="shrink-0 text-sm font-semibold text-[color:var(--ink)]">
+                      {st.count} <span className="text-xs font-normal text-[color:var(--faint)]">absences</span>
+                    </span>
+                  </div>
+                  <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-[color:var(--cream-2)]">
+                    <div className="h-full rounded-full" style={{ width: `${(st.count / maxCount) * 100}%`, background: "var(--accent)" }} />
+                  </div>
+                  <p className="mt-1 text-[11px] text-[color:var(--faint)]">{unis.length} universities · {inr(st.amount)} spend</p>
+                </div>
+              </button>
+
+              {stOpen && (
+                <ul className="border-t border-[color:var(--line-2)] bg-[color:var(--cream)] p-1.5">
+                  {unis.map((u) => {
+                    const uKey = `${st.key}||${u.key}`;
+                    const uOpen = openUni === uKey;
+                    const instrs = group(u.rows, (r) => r.absent ?? "Unknown").sort((a, b) => b.count - a.count);
+                    return (
+                      <li key={uKey} className="rounded-lg">
+                        <button
+                          onClick={() => setOpenUni(uOpen ? null : uKey)}
+                          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors hover:bg-white"
+                        >
+                          <ChevronRight size={14} className="shrink-0 text-[color:var(--faint)] transition-transform" style={{ transform: uOpen ? "rotate(90deg)" : "none" }} />
+                          <Building2 size={13} className="shrink-0 text-[color:var(--faint)]" />
+                          <span className="min-w-0 flex-1 truncate text-sm font-semibold">{u.key}</span>
+                          <span className="shrink-0 text-xs text-[color:var(--muted)]">
+                            {u.count} · {inr(u.amount)}
+                          </span>
+                        </button>
+                        {uOpen && (
+                          <ul className="ml-4 border-l border-[color:var(--line-2)] pl-2">
+                            {instrs.map((ins) => {
+                              const backups = [...new Set(ins.rows.map((r) => r.backup).filter(Boolean))] as string[];
+                              return (
+                                <li key={ins.key}>
+                                  <button
+                                    onClick={() => onDrill(`${u.key} → ${ins.key}`, ins.rows)}
+                                    className="flex w-full items-start justify-between gap-2 rounded-lg px-3 py-2 text-left transition-colors hover:bg-white"
+                                  >
+                                    <span className="min-w-0 flex-1">
+                                      <span className="flex items-center gap-1.5">
+                                        <User size={12} className="shrink-0 text-[color:var(--faint)]" />
+                                        <span className="truncate text-sm font-medium">{ins.key}</span>
+                                        <span className="pill pill-muted shrink-0 !py-0 !text-[10px]">{ins.count} absent</span>
+                                      </span>
+                                      <span className="mt-0.5 block truncate text-[11px] text-[color:var(--faint)]">
+                                        {backups.length ? `Covered by: ${backups.join(", ")}` : "No backup assigned yet"}
+                                      </span>
+                                    </span>
+                                    {ins.amount > 0 && <span className="shrink-0 text-xs font-semibold text-[color:var(--ink)]">{inr(ins.amount)}</span>}
+                                  </button>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

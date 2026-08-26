@@ -17,7 +17,7 @@ export function AnalyticsFilters({
   isAdmin,
   current,
 }: {
-  universities: { value: string; label: string }[];
+  universities: { value: string; label: string; state: string }[];
   states: string[];
   isAdmin: boolean;
   current: { granularity: string; from: string; to: string; university: string; state: string };
@@ -35,6 +35,22 @@ export function AnalyticsFilters({
     },
     [sp, pathname, router],
   );
+
+  // Picking a state also drops a university that doesn't belong to it.
+  const setState = useCallback(
+    (value: string) => {
+      const p = new URLSearchParams(sp.toString());
+      if (value) p.set("state", value);
+      else p.delete("state");
+      const selectedUni = universities.find((u) => u.value === current.university);
+      if (value && selectedUni && selectedUni.state !== value) p.delete("university");
+      router.push(`${pathname}?${p.toString()}`);
+    },
+    [sp, pathname, router, universities, current.university],
+  );
+
+  // University list narrows to the chosen state (dependent dropdown).
+  const uniOptions = current.state ? universities.filter((u) => u.state === current.state) : universities;
 
   const hasFilters = current.from || current.to || current.university || current.state;
 
@@ -103,7 +119,7 @@ export function AnalyticsFilters({
           <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-[color:var(--faint)]">
             State
           </label>
-          <select value={current.state} onChange={(e) => setParam("state", e.target.value)} className="input h-10">
+          <select value={current.state} onChange={(e) => setState(e.target.value)} className="input h-10">
             <option value="">All states</option>
             {states.map((s) => (
               <option key={s} value={s}>
@@ -118,15 +134,15 @@ export function AnalyticsFilters({
       {isAdmin && (
         <div className="min-w-[200px]">
           <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-[color:var(--faint)]">
-            University
+            University {current.state && <span className="text-[color:var(--accent)]">· {current.state}</span>}
           </label>
           <select
             value={current.university}
             onChange={(e) => setParam("university", e.target.value)}
             className="input h-10"
           >
-            <option value="">All universities</option>
-            {universities.map((u) => (
+            <option value="">{current.state ? `All in ${current.state}` : "All universities"}</option>
+            {uniOptions.map((u) => (
               <option key={u.value} value={u.value}>
                 {u.label}
               </option>

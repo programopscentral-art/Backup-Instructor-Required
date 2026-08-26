@@ -55,6 +55,7 @@ interface Row {
   university_id: string | null;
   created_at: string;
   red_flag: boolean | null;
+  absent_instructor_name: string | null;
   assigned_backup_name: string | null;
   universities: { name: string; state: string | null } | null;
   subjects: { name: string } | null;
@@ -98,7 +99,7 @@ export default async function AnalyticsPage({
   let query = supabase
     .from("tickets")
     .select(
-      "id, ticket_no, status, mode, reason_category, university_id, created_at, red_flag, assigned_backup_name, universities(name, state), subjects(name), capabilities(name, manager_name)",
+      "id, ticket_no, status, mode, reason_category, university_id, created_at, red_flag, absent_instructor_name, assigned_backup_name, universities(name, state), subjects(name), capabilities(name, manager_name)",
     );
   if (from) query = query.gte("created_at", from);
   if (to) query = query.lte("created_at", `${to}T23:59:59`);
@@ -211,6 +212,7 @@ export default async function AnalyticsPage({
       university: r.universities?.name ?? "—",
       state: r.universities?.state ?? "Unknown",
       subject: r.subjects?.name ?? "—",
+      absent: r.absent_instructor_name,
       backup: r.assigned_backup_name,
       created_at: r.created_at,
       red_flag: r.red_flag === true,
@@ -240,9 +242,12 @@ export default async function AnalyticsPage({
 
   const refs = adminLike ? await getRefs() : null;
   let states: string[] = [];
+  let uniOptions: { value: string; label: string; state: string }[] = [];
   if (adminLike) {
-    const { data: st } = await supabase.from("universities").select("state").not("state", "is", null);
-    states = [...new Set(((st ?? []) as { state: string | null }[]).map((x) => x.state).filter(Boolean) as string[])].sort();
+    const { data: uall } = await supabase.from("universities").select("id, name, state").eq("status", "active").order("name");
+    const list = (uall ?? []) as { id: string; name: string; state: string | null }[];
+    uniOptions = list.map((u) => ({ value: u.id, label: u.name, state: u.state ?? "" }));
+    states = [...new Set(list.map((u) => u.state).filter(Boolean) as string[])].sort();
   }
   const scopeLabel = adminLike
     ? state
@@ -282,7 +287,7 @@ export default async function AnalyticsPage({
 
       <FadeIn>
         <AnalyticsFilters
-          universities={refs?.universities.options ?? []}
+          universities={uniOptions}
           states={states}
           isAdmin={adminLike}
           current={{ granularity, from, to, university, state }}
