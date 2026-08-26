@@ -211,21 +211,23 @@ function BudgetExplorer({
         </div>
       </div>
 
-      <div className="mb-4 inline-flex rounded-full border border-[color:var(--line-2)] bg-[color:var(--cream)] p-1">
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => {
-              setTab(t.id);
-              setOpen(null);
-            }}
-            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors ${
-              tab === t.id ? "bg-white text-[color:var(--accent)] shadow-sm" : "text-[color:var(--muted)]"
-            }`}
-          >
-            {t.icon} {t.label}
-          </button>
-        ))}
+      <div className="mb-4 -mx-1 overflow-x-auto px-1">
+        <div className="inline-flex w-max rounded-full border border-[color:var(--line-2)] bg-[color:var(--cream)] p-1">
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => {
+                setTab(t.id);
+                setOpen(null);
+              }}
+              className={`flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors ${
+                tab === t.id ? "bg-white text-[color:var(--accent)] shadow-sm" : "text-[color:var(--muted)]"
+              }`}
+            >
+              {t.icon} {t.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {groups.length === 0 ? (
@@ -329,13 +331,15 @@ function AbsenceExplorer({ rows, onDrill }: { rows: ARow[]; onDrill: (title: str
           </h2>
           <p className="mt-0.5 text-xs text-[color:var(--muted)]">Who&apos;s absent most, who covered, and the spend.</p>
         </div>
-        <div className="inline-flex rounded-full border border-[color:var(--line-2)] bg-[color:var(--cream)] p-1">
-          <button onClick={() => setMode("tree")} className={`rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors ${mode === "tree" ? "bg-white text-[color:var(--accent)] shadow-sm" : "text-[color:var(--muted)]"}`}>
-            State → Uni → Instructor
-          </button>
-          <button onClick={() => setMode("top")} className={`rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors ${mode === "top" ? "bg-white text-[color:var(--accent)] shadow-sm" : "text-[color:var(--muted)]"}`}>
-            Top absentees
-          </button>
+        <div className="-mx-1 max-w-full overflow-x-auto px-1">
+          <div className="inline-flex w-max rounded-full border border-[color:var(--line-2)] bg-[color:var(--cream)] p-1">
+            <button onClick={() => setMode("tree")} className={`whitespace-nowrap rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors ${mode === "tree" ? "bg-white text-[color:var(--accent)] shadow-sm" : "text-[color:var(--muted)]"}`}>
+              State → Uni → Instructor
+            </button>
+            <button onClick={() => setMode("top")} className={`whitespace-nowrap rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors ${mode === "top" ? "bg-white text-[color:var(--accent)] shadow-sm" : "text-[color:var(--muted)]"}`}>
+              Top absentees
+            </button>
+          </div>
         </div>
       </div>
 
@@ -491,7 +495,7 @@ function DrillTable({ title, rows, onClose }: { title: string; rows: ARow[]; onC
           {rows.length === 0 ? (
             <p className="px-5 py-10 text-center text-sm text-[color:var(--faint)]">No tickets.</p>
           ) : (
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[680px] text-sm">
               <thead className="sticky top-0 bg-white">
                 <tr className="border-b border-[color:var(--line-2)] text-left text-[11px] uppercase tracking-wide text-[color:var(--faint)]">
                   <th className="px-4 py-2.5 font-semibold">Ticket</th>

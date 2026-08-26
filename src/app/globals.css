@@ -243,6 +243,7 @@ body {
 /* ---------- Tables ---------- */
 .tbl {
   width: 100%;
+  min-width: 640px; /* scroll (not squish) inside its overflow-x-auto wrapper on small screens */
   border-collapse: collapse;
   font-size: 13.5px;
 }

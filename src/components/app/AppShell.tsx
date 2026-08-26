@@ -137,7 +137,7 @@ export function AppShell({
   }
 
   return (
-    <div className="min-h-screen" style={themeVars}>
+    <div className="min-h-screen overflow-x-clip" style={themeVars}>
       <Spotlight />
       {/* ---------- Top bar ---------- */}
       <header className="sticky top-0 z-40 border-b border-[color:var(--line)] bg-white/80 backdrop-blur-xl">

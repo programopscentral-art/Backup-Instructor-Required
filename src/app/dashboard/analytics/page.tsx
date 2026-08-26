@@ -266,8 +266,8 @@ export default async function AnalyticsPage({
       />
 
       {/* Tab switcher */}
-      <FadeIn className="mb-5">
-        <div className="inline-flex rounded-full border border-[color:var(--line-2)] bg-[color:var(--cream)] p-1">
+      <FadeIn className="mb-5 -mx-1 overflow-x-auto px-1 pb-1">
+        <div className="inline-flex w-max rounded-full border border-[color:var(--line-2)] bg-[color:var(--cream)] p-1">
           {[
             { v: "tickets", label: "Backup ticket analytics" },
             { v: "budget", label: "Budget analysis" },
@@ -275,7 +275,7 @@ export default async function AnalyticsPage({
             <Link
               key={t.v}
               href={tabHref(t.v)}
-              className={`rounded-full px-4 py-2 text-[13px] font-semibold transition-colors ${
+              className={`whitespace-nowrap rounded-full px-3.5 py-2 text-[13px] font-semibold transition-colors sm:px-4 ${
                 view === t.v ? "bg-white text-[color:var(--accent)] shadow-sm" : "text-[color:var(--muted)]"
               }`}
             >
