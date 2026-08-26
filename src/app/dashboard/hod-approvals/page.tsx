@@ -33,6 +33,7 @@ interface RawDone {
   amount: number | null;
   hod_approved_at: string | null;
   tickets: {
+    id: string;
     ticket_no: string;
     universities: { name: string } | null;
     subjects: { name: string } | null;
@@ -100,11 +101,12 @@ export default async function HodApprovalsPage() {
   // Recent HOD sign-offs — a short read-only history for confidence/reference.
   const { data: doneRows } = await supabase
     .from("invoices")
-    .select("id, amount, hod_approved_at, tickets(ticket_no, universities(name), subjects(name))")
+    .select("id, amount, hod_approved_at, tickets(id, ticket_no, universities(name), subjects(name))")
     .eq("status", "hod_approved")
     .order("hod_approved_at", { ascending: false })
-    .limit(8);
+    .limit(50);
   const done: DoneClaim[] = ((doneRows ?? []) as unknown as RawDone[]).map((d) => ({
+    ticketId: d.tickets?.id ?? "",
     ticketNo: d.tickets?.ticket_no ?? "—",
     university: d.tickets?.universities?.name ?? "—",
     subject: d.tickets?.subjects?.name ?? "—",

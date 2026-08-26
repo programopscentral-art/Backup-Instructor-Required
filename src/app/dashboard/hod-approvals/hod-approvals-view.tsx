@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Stamp,
   ExternalLink,
@@ -12,6 +13,8 @@ import {
   Clock,
   Building2,
   BookOpen,
+  Search,
+  ArrowUpRight,
 } from "lucide-react";
 import { reviewInvoice } from "@/app/dashboard/invoices/actions";
 
@@ -37,6 +40,7 @@ export interface PendingClaim {
 }
 
 export interface DoneClaim {
+  ticketId: string;
   ticketNo: string;
   university: string;
   subject: string;
@@ -105,25 +109,76 @@ export function HodApprovalsView({ pending, done }: { pending: PendingClaim[]; d
         </ul>
       )}
 
-      {/* Recently signed off */}
-      {done.length > 0 && (
-        <div className="card p-6">
-          <h2 className="mb-4 flex items-center gap-2 font-[family-name:var(--font-display)] text-base font-bold">
-            <CheckCircle2 size={17} className="text-[color:var(--emerald,#047857)]" /> Recently approved by HOD
-          </h2>
-          <ul className="divide-y divide-[color:var(--line-2)]">
-            {done.map((d, i) => (
-              <li key={i} className="flex items-center gap-3 py-2.5 text-sm">
-                <span className="min-w-0 flex-1 truncate">
-                  <span className="font-semibold">{d.ticketNo}</span> · {d.subject} ·{" "}
-                  <span className="text-[color:var(--muted)]">{d.university}</span>
-                </span>
-                <span className="pill pill-muted">{inr(d.amount)}</span>
-                <span className="w-20 text-right text-xs text-[color:var(--faint)]">{ago(d.approvedAt)}</span>
-              </li>
-            ))}
-          </ul>
+      {/* Recently signed off — sortable, searchable, click-through */}
+      {done.length > 0 && <RecentlyApproved done={done} />}
+    </div>
+  );
+}
+
+function RecentlyApproved({ done }: { done: DoneClaim[] }) {
+  const [q, setQ] = useState("");
+  const [sort, setSort] = useState<"newest" | "oldest" | "amount" | "amount_asc">("newest");
+
+  const rows = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    let out = done.filter((d) =>
+      !needle ? true : `${d.ticketNo} ${d.subject} ${d.university}`.toLowerCase().includes(needle),
+    );
+    out = [...out].sort((a, b) => {
+      if (sort === "amount") return (b.amount ?? 0) - (a.amount ?? 0);
+      if (sort === "amount_asc") return (a.amount ?? 0) - (b.amount ?? 0);
+      const at = a.approvedAt ?? "";
+      const bt = b.approvedAt ?? "";
+      return sort === "oldest" ? at.localeCompare(bt) : -at.localeCompare(bt);
+    });
+    return out;
+  }, [done, q, sort]);
+
+  return (
+    <div className="card p-6">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="flex items-center gap-2 font-[family-name:var(--font-display)] text-base font-bold">
+          <CheckCircle2 size={17} className="text-[color:var(--emerald,#047857)]" /> Recently approved by HOD
+        </h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[color:var(--faint)]" />
+            <input
+              className="input !w-44 !py-1.5 !pl-8 !text-[13px]"
+              placeholder="Search…"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
+          </div>
+          <select className="select !w-auto !py-1.5 !text-[13px]" value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="amount">Highest amount</option>
+            <option value="amount_asc">Lowest amount</option>
+          </select>
         </div>
+      </div>
+      {rows.length === 0 ? (
+        <p className="py-6 text-center text-sm text-[color:var(--faint)]">No matches.</p>
+      ) : (
+        <ul className="divide-y divide-[color:var(--line-2)]">
+          {rows.map((d) => (
+            <li key={d.ticketId}>
+              <Link
+                href={`/dashboard/tickets/${d.ticketId}`}
+                className="group flex items-center gap-3 rounded-lg px-2 py-2.5 text-sm transition-colors hover:bg-[color:var(--cream)]"
+              >
+                <span className="min-w-0 flex-1 truncate">
+                  <span className="font-semibold text-[color:var(--accent)] group-hover:underline">{d.ticketNo}</span> ·{" "}
+                  {d.subject} · <span className="text-[color:var(--muted)]">{d.university}</span>
+                </span>
+                <span className="pill pill-muted shrink-0">{inr(d.amount)}</span>
+                <span className="w-16 shrink-0 text-right text-xs text-[color:var(--faint)]">{ago(d.approvedAt)}</span>
+                <ArrowUpRight size={15} className="shrink-0 text-[color:var(--faint)] group-hover:text-[color:var(--accent)]" />
+              </Link>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );
