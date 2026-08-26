@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Search, X } from "lucide-react";
+import { Search, X, SlidersHorizontal } from "lucide-react";
 
 const fmtDate = (iso: string) =>
   new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit", timeZone: "Asia/Kolkata" });
@@ -78,6 +78,7 @@ export function InvoicesView({ invoices }: { invoices: InvoiceRow[] }) {
   }, [invoices, q, status, stateF, uni, from, to, sort]);
 
   const hasFilters = status || stateF || uni || from || to || q;
+  const [showFilters, setShowFilters] = useState(false);
   function clearAll() {
     setQ("");
     setStatus("");
@@ -89,11 +90,23 @@ export function InvoicesView({ invoices }: { invoices: InvoiceRow[] }) {
 
   return (
     <div>
-      <div className="mb-4 flex flex-wrap items-center gap-2.5">
-        <div className="relative">
+      <div className="mb-4 space-y-2.5">
+      <div className="flex items-center gap-2.5">
+        <div className="relative flex-1 sm:flex-none">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--faint)]" />
-          <input className="input !w-52 !py-2 !pl-9 !text-[13px]" placeholder="Search invoices…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input className="input !w-full !py-2 !pl-9 !text-[13px] sm:!w-52" placeholder="Search invoices…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
+        <button
+          onClick={() => setShowFilters((s) => !s)}
+          className={`btn btn-sm gap-1.5 sm:hidden ${showFilters || hasFilters ? "btn-primary" : "btn-ghost"}`}
+        >
+          <SlidersHorizontal size={14} /> Filters
+        </button>
+        <span className="ml-auto shrink-0 text-xs text-[color:var(--muted)]">
+          {view.length} of {invoices.length}
+        </span>
+      </div>
+      <div className={`${showFilters ? "flex" : "hidden"} flex-wrap items-center gap-2.5 sm:flex`}>
         <select className="select !w-auto !py-2 !text-[13px]" value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="">All statuses</option>
           {Object.keys(LABEL).map((s) => (
@@ -139,9 +152,7 @@ export function InvoicesView({ invoices }: { invoices: InvoiceRow[] }) {
             <X size={13} /> Clear
           </button>
         )}
-        <span className="ml-auto text-xs text-[color:var(--muted)]">
-          {view.length} of {invoices.length}
-        </span>
+      </div>
       </div>
 
       <div className="card overflow-hidden">

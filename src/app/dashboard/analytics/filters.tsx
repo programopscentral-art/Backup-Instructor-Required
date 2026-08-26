@@ -1,8 +1,8 @@
 "use client";
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { useCallback } from "react";
-import { X, Download } from "lucide-react";
+import { useCallback, useState } from "react";
+import { X, Download, SlidersHorizontal } from "lucide-react";
 
 const GRANS: [string, string][] = [
   ["day", "Day"],
@@ -61,9 +61,11 @@ export function AnalyticsFilters({
   if (current.university) exportParams.set("university", current.university);
   if (current.state) exportParams.set("state", current.state);
   const exportHref = `/dashboard/analytics/export${exportParams.toString() ? `?${exportParams}` : ""}`;
+  const [open, setOpen] = useState(false);
 
   return (
-    <div className="card mb-6 flex flex-wrap items-end gap-4 p-4">
+    <div className="card mb-6 p-4">
+      <div className="flex flex-wrap items-end gap-4">
       {/* Granularity */}
       <div>
         <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-[color:var(--faint)]">
@@ -89,6 +91,18 @@ export function AnalyticsFilters({
         </div>
       </div>
 
+        <button
+          onClick={() => setOpen((s) => !s)}
+          className={`btn btn-sm gap-1.5 sm:hidden ${open || hasFilters ? "btn-primary" : "btn-ghost"}`}
+        >
+          <SlidersHorizontal size={14} /> Filters
+        </button>
+        <a href={exportHref} className="btn btn-primary btn-sm mb-0.5 ml-auto gap-1.5" download>
+          <Download size={14} /> Export CSV
+        </a>
+      </div>
+
+      <div className={`${open ? "flex" : "hidden"} mt-3 flex-wrap items-end gap-4 sm:mt-4 sm:flex`}>
       {/* Date range */}
       <div>
         <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-[color:var(--faint)]">
@@ -159,10 +173,7 @@ export function AnalyticsFilters({
           <X size={14} /> Clear
         </button>
       )}
-
-      <a href={exportHref} className="btn btn-primary btn-sm mb-0.5 ml-auto gap-1.5" download>
-        <Download size={14} /> Export CSV
-      </a>
+      </div>
     </div>
   );
 }

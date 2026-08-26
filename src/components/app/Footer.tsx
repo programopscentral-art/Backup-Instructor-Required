@@ -6,14 +6,14 @@ import { ArrowUpRight, ShieldCheck } from "lucide-react";
 const PLATFORM: [string, string][] = [
   ["Dashboard", "/dashboard"],
   ["Tickets", "/dashboard/tickets"],
+  ["My Assignments", "/dashboard/my-assignments"],
   ["Analytics", "/dashboard/analytics"],
-  ["Invoices", "/dashboard/invoices"],
 ];
 const OPS: [string, string][] = [
-  ["Universities", "/dashboard/universities"],
+  ["Invoices", "/dashboard/invoices"],
+  ["HOD Approvals", "/dashboard/hod-approvals"],
   ["Backup Pool", "/dashboard/backup-pool"],
   ["Logs", "/dashboard/logs"],
-  ["Access", "/dashboard/access"],
 ];
 
 export function Footer() {
