@@ -29,6 +29,7 @@ import type { CSSProperties } from "react";
 import Image from "next/image";
 import { signOut } from "@/lib/auth/actions";
 import { NotificationBell } from "./NotificationBell";
+import { ThemeToggle } from "./ThemeToggle";
 import { Footer } from "./Footer";
 import { Spotlight } from "@/components/ui/Spotlight";
 import { themeFor } from "@/lib/theme/role-theme";
@@ -140,7 +141,7 @@ export function AppShell({
     <div className="min-h-screen overflow-x-clip" style={themeVars}>
       <Spotlight />
       {/* ---------- Top bar ---------- */}
-      <header className="sticky top-0 z-40 border-b border-[color:var(--line)] bg-white/80 backdrop-blur-xl">
+      <header className="sticky top-0 z-40 border-b border-[color:var(--line)] bg-[color:var(--surface)]/80 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8" ref={navRef}>
           <div className="flex min-w-0 items-center gap-3 xl:gap-6">
             <Brand />
@@ -183,7 +184,7 @@ export function AppShell({
                           animate={{ opacity: 1, y: 0, scale: 1 }}
                           exit={{ opacity: 0, y: 8, scale: 0.98 }}
                           transition={{ duration: 0.16 }}
-                          className="absolute left-0 top-full mt-2 w-60 overflow-hidden rounded-2xl border border-[color:var(--line)] bg-white p-1.5 shadow-[var(--shadow)]"
+                          className="absolute left-0 top-full mt-2 w-60 overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-1.5 shadow-[var(--shadow)]"
                         >
                           {g.items!.map((it) => {
                             const Icon = it.icon;
@@ -224,7 +225,7 @@ export function AppShell({
             <div className="relative hidden sm:block">
               <button
                 onClick={() => setUserMenu(!userMenu)}
-                className="flex items-center gap-2.5 rounded-full border border-[color:var(--line-2)] bg-white py-1.5 pl-1.5 pr-3 transition-colors hover:border-[color:var(--accent)]"
+                className="flex items-center gap-2.5 rounded-full border border-[color:var(--line-2)] bg-[color:var(--surface)] py-1.5 pl-1.5 pr-3 transition-colors hover:border-[color:var(--accent)]"
               >
                 <span className="grid h-8 w-8 place-items-center rounded-full bg-[color:var(--accent)] text-sm font-bold text-white">
                   {(user.name || user.email).charAt(0).toUpperCase()}
@@ -244,12 +245,14 @@ export function AppShell({
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 8, scale: 0.98 }}
                     transition={{ duration: 0.16 }}
-                    className="absolute right-0 top-full mt-2 w-56 overflow-hidden rounded-2xl border border-[color:var(--line)] bg-white p-1.5 shadow-[var(--shadow)]"
+                    className="absolute right-0 top-full mt-2 w-56 overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-1.5 shadow-[var(--shadow)]"
                   >
                     <div className="px-3 py-2">
                       <p className="truncate text-sm font-semibold">{user.name}</p>
                       <p className="truncate text-xs text-[color:var(--faint)]">{user.email}</p>
                     </div>
+                    <div className="my-1 hairline" />
+                    <ThemeToggle variant="menu" />
                     <div className="my-1 hairline" />
                     <form action={signOut}>
                       <button className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-[color:var(--rose)] transition-colors hover:bg-[color:var(--cream-2)]">
@@ -285,7 +288,7 @@ export function AppShell({
               animate={{ x: 0 }}
               exit={{ x: 300 }}
               transition={{ type: "spring", stiffness: 300, damping: 32 }}
-              className="fixed inset-y-0 right-0 z-50 flex w-72 flex-col bg-white px-4 py-5 shadow-2xl lg:hidden"
+              className="fixed inset-y-0 right-0 z-50 flex w-72 flex-col bg-[color:var(--surface)] px-4 py-5 shadow-2xl lg:hidden"
             >
               <div className="mb-4 flex items-center justify-between">
                 <Brand />
@@ -319,6 +322,9 @@ export function AppShell({
                   </div>
                 ))}
               </div>
+              <div className="mb-2 border-t border-[color:var(--line)] pt-2">
+                <ThemeToggle variant="menu" />
+              </div>
               <div className="glass-2 flex items-center justify-between p-3">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold">{user.name}</p>
@@ -345,8 +351,7 @@ function ActiveBg() {
   return (
     <motion.span
       layoutId="nav-active"
-      className="absolute inset-0 rounded-full"
-      style={{ background: "var(--accent-soft)" }}
+      className="navpill absolute inset-0 rounded-full"
       transition={{ type: "spring", stiffness: 400, damping: 32 }}
     />
   );

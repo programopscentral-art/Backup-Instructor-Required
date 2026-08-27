@@ -21,6 +21,7 @@
 }
 
 :root {
+  color-scheme: light;
   --font-display: "Satoshi", ui-sans-serif, system-ui, sans-serif;
   --bg: #fafaf8;
   --cream: #fefbf7;
@@ -380,4 +381,208 @@ body {
   .badge-pulse {
     animation: none !important;
   }
+}
+
+/* ============================================================
+   DARK MODE  ·  "Backup OS · Dark"  (x.ai-inspired)
+   Near-black canvas, crisp hairlines, quiet type, one accent.
+   Light (NIAT) mode is the default and is left untouched — every
+   rule here is scoped under :root[data-theme="dark"].
+   ============================================================ */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #08080a;          /* page canvas — near black */
+  --cream: #0e0e12;       /* table head / backdrop base */
+  --cream-2: #17171d;     /* row hover / subtle fill */
+  --surface: #0f0f13;     /* cards, menus, sheets */
+  --ink: #f4f4f5;         /* primary text */
+  --ink-strong: #ffffff;
+  --muted: #a1a1aa;       /* secondary text */
+  --faint: #6b6b74;       /* tertiary text */
+  --line: #212127;        /* hairline borders */
+  --line-2: #2b2b33;      /* stronger borders / inputs */
+  --accent-soft: rgba(var(--accent-rgb), 0.2); /* used by non-AppShell pages */
+  --amber-soft: rgba(180, 83, 9, 0.16);
+  --emerald-soft: rgba(4, 120, 87, 0.16);
+  --blue: #93b4ff;
+  --blue-soft: rgba(29, 78, 216, 0.20);
+  --rose: #fb7185;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.6);
+  --shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.6), 0 20px 48px -20px rgba(0, 0, 0, 0.8);
+  --shadow-brand: 0 12px 34px -14px rgba(var(--accent-rgb), 0.65);
+}
+
+/* Smooth cross-fade when flipping themes (only fires on toggle — the initial
+   paint is already correct thanks to the no-flash script in the layout). */
+body,
+header,
+aside,
+.card,
+.glass,
+.glass-2,
+.tbl thead th,
+.tbl tbody td {
+  transition: background-color 0.35s ease, border-color 0.35s ease, color 0.25s ease;
+}
+
+/* ---- Dark backdrop: deep vignette + faint accent aurora + subtle grid ---- */
+:root[data-theme="dark"] .aurora-bg {
+  background: radial-gradient(900px 520px at 12% -8%, rgba(var(--accent-rgb), 0.16), transparent 60%),
+    radial-gradient(820px 600px at 92% -2%, rgba(255, 255, 255, 0.035), transparent 55%),
+    radial-gradient(1000px 720px at 50% 110%, rgba(var(--accent-rgb), 0.10), transparent 60%),
+    linear-gradient(180deg, #0b0b0f, var(--bg) 42%);
+}
+:root[data-theme="dark"] .grid-overlay {
+  background-image: linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+  opacity: 0.6;
+}
+
+/* ---- Surfaces ---- */
+:root[data-theme="dark"] .glass {
+  background: rgba(17, 17, 21, 0.72);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .glass-2 {
+  background: rgba(20, 20, 25, 0.85);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .card-hover:hover {
+  border-color: rgba(var(--accent-rgb), 0.5);
+  box-shadow: 0 24px 50px -24px rgba(0, 0, 0, 0.85);
+}
+
+/* Surface whites used across content pages (cards, menus, filter bars, KPI
+   tiles). Plain `bg-white` is only ever a surface in this app; hero/logo whites
+   use /opacity variants (bg-white/15, /10, /90) or a #ffffff literal, so they're
+   untouched. This remaps them all to the dark surface in one place. */
+:root[data-theme="dark"] .bg-white {
+  background-color: var(--surface) !important;
+}
+:root[data-theme="dark"] .bg-white\/70 {
+  background-color: color-mix(in srgb, var(--surface) 72%, transparent) !important;
+}
+
+/* ---- Inputs & ghost buttons (they hardcode #fff in light) ---- */
+:root[data-theme="dark"] .input,
+:root[data-theme="dark"] .select,
+:root[data-theme="dark"] .btn-ghost {
+  background: #131318;
+  border-color: var(--line-2);
+  color: var(--ink);
+}
+:root[data-theme="dark"] .input:focus,
+:root[data-theme="dark"] .select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.3);
+}
+:root[data-theme="dark"] .btn-ghost:hover {
+  border-color: var(--accent);
+  color: var(--ink);
+  background: #191920;
+}
+:root[data-theme="dark"] .btn-danger {
+  color: #fda4af;
+  background: rgba(190, 18, 60, 0.15);
+  border-color: rgba(190, 18, 60, 0.4);
+}
+:root[data-theme="dark"] .btn-danger:hover {
+  background: rgba(190, 18, 60, 0.26);
+}
+
+/* ---- The role-accent nav highlight (was an inline light pastel) ---- */
+.navpill {
+  background: var(--accent-soft);
+}
+:root[data-theme="dark"] .navpill {
+  background: rgba(var(--accent-rgb), 0.2);
+}
+
+/* ---- Pills (all hardcode light tints) ---- */
+:root[data-theme="dark"] .pill-accent,
+:root[data-theme="dark"] .pill-crimson {
+  color: color-mix(in srgb, var(--accent) 55%, #fff);
+  background: rgba(var(--accent-rgb), 0.18);
+  border-color: rgba(var(--accent-rgb), 0.4);
+}
+:root[data-theme="dark"] .pill-amber,
+:root[data-theme="dark"] .pill-warn {
+  color: #fbbf24;
+  background: rgba(180, 83, 9, 0.18);
+  border-color: rgba(180, 83, 9, 0.4);
+}
+:root[data-theme="dark"] .pill-good {
+  color: #34d399;
+  background: rgba(4, 120, 87, 0.18);
+  border-color: rgba(4, 120, 87, 0.4);
+}
+:root[data-theme="dark"] .pill-crit {
+  color: #fb7185;
+  background: rgba(190, 18, 60, 0.18);
+  border-color: rgba(190, 18, 60, 0.42);
+}
+:root[data-theme="dark"] .pill-info {
+  color: #93b4ff;
+  background: rgba(29, 78, 216, 0.2);
+  border-color: rgba(29, 78, 216, 0.42);
+}
+:root[data-theme="dark"] .pill-violet {
+  color: #c4b5fd;
+  background: rgba(109, 40, 217, 0.2);
+  border-color: rgba(109, 40, 217, 0.42);
+}
+:root[data-theme="dark"] .pill-muted {
+  color: var(--muted);
+  background: #1b1b21;
+  border-color: var(--line-2);
+}
+
+/* ---- Tables ---- */
+:root[data-theme="dark"] .tbl thead th {
+  background: #101015;
+}
+:root[data-theme="dark"] .tbl tbody tr:hover {
+  background: var(--cream-2);
+}
+
+/* ---- Scrollbar + shimmer ---- */
+:root[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: #2c2c34;
+  border-color: var(--bg);
+}
+:root[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: #3a3a44;
+}
+:root[data-theme="dark"] .shimmer {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.06), transparent);
+  background-size: 200% 100%;
+}
+
+/* ---- Theme toggle button ---- */
+.theme-toggle {
+  display: inline-grid;
+  place-items: center;
+  height: 40px;
+  width: 40px;
+  border-radius: 999px;
+  border: 1px solid var(--line-2);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s, background 0.2s, transform 0.15s;
+}
+.theme-toggle:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.theme-toggle:active {
+  transform: scale(0.94);
+}
+:root[data-theme="dark"] .theme-toggle {
+  background: #131318;
+  color: #f0c86a;
+}
+:root[data-theme="dark"] .theme-toggle:hover {
+  color: #ffd77a;
+  border-color: #ffd77a;
 }

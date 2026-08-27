@@ -2,6 +2,7 @@ import Image from "next/image";
 import type { CSSProperties } from "react";
 import { SignInButton } from "./sign-in-button";
 import { FadeIn } from "@/components/ui/motion";
+import { ThemeToggle } from "@/components/app/ThemeToggle";
 
 const FEATURES = [
   "Auto role-routing by email",
@@ -20,6 +21,9 @@ function Check() {
 export default function LoginPage() {
   return (
     <main className="relative min-h-screen lg:grid lg:grid-cols-[1.05fr_1fr]">
+      <div className="absolute right-4 top-4 z-30">
+        <ThemeToggle />
+      </div>
       {/* ============ LEFT — animated brand panel ============ */}
       <section
         className="mesh-hero hero-sheen relative hidden flex-col justify-between overflow-hidden p-12 text-white lg:flex"
@@ -37,7 +41,7 @@ export default function LoginPage() {
 
         {/* top: logo */}
         <FadeIn className="relative z-10">
-          <span className="inline-flex items-center rounded-2xl bg-white p-3 shadow-xl">
+          <span className="inline-flex items-center rounded-2xl bg-[#ffffff] p-3 shadow-xl">
             <Image src="/niat-logo.png" alt="NIAT — NxtWave of Innovation in Advanced Technologies" width={220} height={52} priority className="h-11 w-auto" />
           </span>
         </FadeIn>
@@ -85,7 +89,7 @@ export default function LoginPage() {
             {/* logo — shield on mobile, compact everywhere */}
             <div className="mb-7 text-center">
               <FadeIn delay={0.05}>
-                <span className="mx-auto mb-5 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-[var(--shadow-brand)] ring-1 ring-[color:var(--line)]">
+                <span className="mx-auto mb-5 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-[#ffffff] shadow-[var(--shadow-brand)] ring-1 ring-[color:var(--line)]">
                   <Image src="/icon.png" alt="NIAT" width={44} height={44} className="h-11 w-11" />
                 </span>
               </FadeIn>
