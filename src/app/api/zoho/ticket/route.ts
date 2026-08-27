@@ -321,13 +321,18 @@ export async function POST(req: Request) {
   const recipients = new Map<string, { userId: string | null; email: string | null }>();
   if (raisedBy || raiserEmail) recipients.set(raisedBy ?? raiserEmail!, { userId: raisedBy, email: raiserEmail });
 
-  // CM of the capability
+  // ALL Capability Managers of the capability (a capability can have several).
   if (capabilityId) {
-    const { data: cap } = await db.from("capabilities").select("manager_user_id").eq("id", capabilityId).maybeSingle();
-    const cmId = (cap as { manager_user_id: string | null } | null)?.manager_user_id ?? null;
-    if (cmId) {
-      const { data: cmProf } = await db.from("profiles").select("email").eq("id", cmId).maybeSingle();
-      recipients.set(cmId, { userId: cmId, email: (cmProf as { email: string } | null)?.email ?? null });
+    const { data: cms } = await db
+      .from("capability_managers")
+      .select("email")
+      .eq("capability_id", capabilityId)
+      .eq("status", "active");
+    for (const cm of (cms ?? []) as { email: string | null }[]) {
+      const em = (cm.email ?? "").toLowerCase();
+      if (!em.includes("@")) continue;
+      const { data: p } = await db.from("profiles").select("id").ilike("email", em).maybeSingle();
+      recipients.set(p?.id ?? em, { userId: p?.id ?? null, email: em });
     }
   }
 

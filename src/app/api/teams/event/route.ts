@@ -15,6 +15,19 @@ async function backupMention(db: DB, backupId: string | null): Promise<Mention[]
   return r?.email ? [{ name: r.instructor_name, email: r.email }] : [];
 }
 
+/** Every Capability Manager of a capability, as @mentions (with an email). */
+async function capabilityMentions(db: DB, capabilityId: string | null): Promise<Mention[]> {
+  if (!capabilityId) return [];
+  const { data } = await db
+    .from("capability_managers")
+    .select("name, email")
+    .eq("capability_id", capabilityId)
+    .eq("status", "active");
+  return ((data ?? []) as { name: string; email: string | null }[])
+    .filter((m) => m.email)
+    .map((m) => ({ name: m.name, email: m.email as string }));
+}
+
 /** Everyone holding a given role, as @mentions (only those with an email). */
 async function roleMentions(db: DB, roles: string[]): Promise<Mention[]> {
   const { data: ras } = await db.from("role_assignments").select("user_id").in("role", roles);
@@ -122,7 +135,7 @@ export async function POST(req: Request) {
   const { data: ev } = await db
     .from("ticket_events")
     .select(
-      "id, from_status, to_status, note, actor_name, teams_sent_at, ticket_id, tickets(ticket_no, mode, assigned_backup_id, assigned_backup_name, absent_instructor_name, universities(name), subjects(name), capabilities(manager_name, manager_email))",
+      "id, from_status, to_status, note, actor_name, teams_sent_at, ticket_id, tickets(ticket_no, mode, capability_id, assigned_backup_id, assigned_backup_name, absent_instructor_name, universities(name), subjects(name), capabilities(manager_name, manager_email))",
     )
     .eq("id", eventId)
     .maybeSingle();
@@ -133,6 +146,7 @@ export async function POST(req: Request) {
   const t = ev.tickets as unknown as {
     ticket_no: string;
     mode: string | null;
+    capability_id: string | null;
     assigned_backup_id: string | null;
     assigned_backup_name: string | null;
     absent_instructor_name: string | null;
@@ -145,9 +159,7 @@ export async function POST(req: Request) {
   let mentions: Mention[] = [];
   const noteL = (ev.note || "").toLowerCase();
   if (ev.to_status === "raised") {
-    mentions = t?.capabilities?.manager_email
-      ? [{ name: t.capabilities.manager_name || t.capabilities.manager_email, email: t.capabilities.manager_email }]
-      : [];
+    mentions = await capabilityMentions(db, t?.capability_id ?? null); // all CMs of the capability
   } else if (ev.to_status === "backup_assigned" || ev.to_status === "confirmed" || ev.to_status === "hod_approved") {
     mentions = await backupMention(db, t?.assigned_backup_id ?? null);
   } else if (ev.to_status === "ops_approved") {
