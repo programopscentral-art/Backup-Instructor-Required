@@ -405,6 +405,30 @@ export async function assignCapability(_prev: ActionState, formData: FormData): 
     note: `Capability assigned: ${managerNameResolved ? `CM ${managerNameResolved}` : "manager pending"}.`,
   });
 
+  // Feed the assigned manager into capability_managers (the single source of
+  // truth) so notifications reach them and the capability lead auto-syncs.
+  if (managerUserResolved) {
+    const { data: mp } = await supabase.from("profiles").select("email, full_name").eq("id", managerUserResolved).maybeSingle();
+    const memail = (mp as { email: string | null } | null)?.email ?? null;
+    if (memail) {
+      const { data: existsCm } = await supabase
+        .from("capability_managers")
+        .select("id")
+        .eq("capability_id", capabilityId)
+        .ilike("email", memail)
+        .maybeSingle();
+      if (!existsCm) {
+        await supabase.from("capability_managers").insert({
+          capability_id: capabilityId,
+          name: managerNameResolved || (mp as { full_name: string | null } | null)?.full_name || memail,
+          email: memail.toLowerCase(),
+          user_id: managerUserResolved,
+          status: "active",
+        });
+      }
+    }
+  }
+
   // The normal flow now repeats: notify EVERY Capability Manager of the
   // newly-assigned capability (in-app + email); the ticket_event above also
   // fires the Teams card that @mentions them.
