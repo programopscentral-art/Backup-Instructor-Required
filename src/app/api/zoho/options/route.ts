@@ -97,8 +97,10 @@ export async function GET(req: Request) {
 
   return NextResponse.json({
     ok: true,
+    // "Other (not listed)" lets a raiser flag a new/unlisted subject — it lands
+    // with no capability and instantly alerts the admin (Teams + email) to add it.
     universities: (unis ?? []).map((u) => u.name),
-    subjects: (subs ?? []).map((s) => s.name),
+    subjects: [...(subs ?? []).map((s) => s.name), "Other (not listed)"],
     reasons: (reasons ?? []).map((r) => r.label),
     modes: ["No preference", "Online", "Offline"],
   });

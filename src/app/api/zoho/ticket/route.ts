@@ -312,11 +312,18 @@ export async function POST(req: Request) {
     note: `Raised via Zoho${universityId ? "" : " — university not matched (needs admin)"}${capabilityId ? "" : "; subject has no Capability Manager"}.`,
   });
 
-  // Notify: raiser, the subject's CM, and all Admins/HODs.
+  // Notify: raiser, the subject's CMs, and all Admins/HODs.
   const uni = info.universities?.name ?? (universityRaw || "a university");
   const subj = info.subjects?.name ?? (subjectRaw || "a subject");
-  const title = `New backup request — ${info.ticket_no}`;
-  const bodyMsg = `A ticket for ${subj} at ${uni} was raised via Zoho. Absent: ${instructor || "—"}. Reason: ${reason || "—"}.`;
+  // No capability = a new/unlisted subject (incl. the Zoho "Other" option) — the
+  // admin must add the subject + assign a Capability Manager before it can route.
+  const noCap = !capabilityId;
+  const title = noCap
+    ? `⚠️ New subject — needs admin — ${info.ticket_no}`
+    : `New backup request — ${info.ticket_no}`;
+  const bodyMsg = noCap
+    ? `A ticket for "${subjectRaw || subj}" at ${uni} was raised via Zoho, but that subject isn't mapped to a Capability yet. Please add the subject and assign a Capability Manager — then it routes automatically. Absent: ${instructor || "—"}. Details: ${notes || reason || "—"}.`
+    : `A ticket for ${subj} at ${uni} was raised via Zoho. Absent: ${instructor || "—"}. Reason: ${reason || "—"}.`;
 
   const recipients = new Map<string, { userId: string | null; email: string | null }>();
   if (raisedBy || raiserEmail) recipients.set(raisedBy ?? raiserEmail!, { userId: raisedBy, email: raiserEmail });

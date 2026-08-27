@@ -30,6 +30,30 @@ export async function notifyBackup(backupId: string | null | undefined, msg: Msg
   });
 }
 
+/** Notify every active Capability Manager of a capability (in-app + email). */
+export async function notifyCapabilityManagers(capabilityId: string | null | undefined, msg: Msg) {
+  if (!capabilityId) return;
+  const db = createAdminClient();
+  const { data: cms } = await db
+    .from("capability_managers")
+    .select("email")
+    .eq("capability_id", capabilityId)
+    .eq("status", "active");
+  for (const cm of (cms ?? []) as { email: string | null }[]) {
+    const email = cm.email;
+    if (!email) continue;
+    const { data: prof } = await db.from("profiles").select("id").ilike("email", email).maybeSingle();
+    await notify(db, {
+      recipientUserId: (prof as { id: string } | null)?.id ?? null,
+      recipientEmail: email,
+      type: msg.type ?? "ticket",
+      title: msg.title,
+      body: msg.body,
+      ticketId: msg.ticketId,
+    });
+  }
+}
+
 /** Notify everyone holding a given role (admin / hod). */
 async function notifyByRoles(roles: string[], msg: Msg) {
   const db = createAdminClient();

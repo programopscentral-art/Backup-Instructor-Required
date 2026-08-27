@@ -160,6 +160,7 @@ export async function POST(req: Request) {
   const noteL = (ev.note || "").toLowerCase();
   if (ev.to_status === "raised") {
     mentions = await capabilityMentions(db, t?.capability_id ?? null); // all CMs of the capability
+    if (mentions.length === 0) mentions = await roleMentions(db, ["admin"]); // no CMs (new/unknown subject) → page admins
   } else if (ev.to_status === "backup_assigned" || ev.to_status === "confirmed" || ev.to_status === "hod_approved") {
     mentions = await backupMention(db, t?.assigned_backup_id ?? null);
   } else if (ev.to_status === "ops_approved") {

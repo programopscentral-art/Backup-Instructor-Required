@@ -77,6 +77,9 @@ function classify(e: TeamsEvent): { emoji: string; title: string; color: CardCol
 
   switch (to) {
     case "raised":
+      if (note.includes("no capability manager") || note.includes("needs admin"))
+        return { emoji: "⚠️", title: "New subject — needs admin", color: "Attention" };
+      if (note.includes("capability assigned")) return { emoji: "🎯", title: "Routed to Capability Managers", color: "Accent" };
       return { emoji: "🆕", title: "New backup request", color: "Accent" };
     case "backup_assigned":
       return { emoji: "👤", title: "Backup assigned", color: "Accent" };

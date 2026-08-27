@@ -5,7 +5,7 @@ import { getSessionContext } from "@/lib/auth/session";
 import { createAuthedClient } from "@/lib/supabase/server";
 import { isAdminLike } from "@/lib/auth/roles";
 import { notify } from "@/lib/notify";
-import { notifyBackup, notifyHod } from "@/lib/notify-targets";
+import { notifyBackup, notifyHod, notifyCapabilityManagers } from "@/lib/notify-targets";
 import { closeZohoTicket } from "@/lib/zoho/close";
 import { STATUS_META, type TicketStatus } from "@/lib/tickets/status";
 
@@ -405,6 +405,25 @@ export async function assignCapability(_prev: ActionState, formData: FormData): 
     note: `Capability assigned: ${managerNameResolved ? `CM ${managerNameResolved}` : "manager pending"}.`,
   });
 
+  // The normal flow now repeats: notify EVERY Capability Manager of the
+  // newly-assigned capability (in-app + email); the ticket_event above also
+  // fires the Teams card that @mentions them.
+  const { data: tinfo } = await supabase
+    .from("tickets")
+    .select("ticket_no, universities(name), subjects(name)")
+    .eq("id", ticketId)
+    .maybeSingle();
+  const ti = tinfo as unknown as {
+    ticket_no: string;
+    universities: { name: string } | null;
+    subjects: { name: string } | null;
+  } | null;
+  await notifyCapabilityManagers(capabilityId, {
+    ticketId,
+    title: `🎯 New ticket in your capability — ${ti?.ticket_no ?? ""}`.trim(),
+    body: `A backup request for ${ti?.subjects?.name ?? "a subject"} at ${ti?.universities?.name ?? "a university"} was routed to your capability. Please review and assign a backup.`,
+  });
+  // Fallback: if the capability has no CMs on the list yet, at least ping the lead.
   if (managerUserResolved) {
     await notify(supabase, {
       recipientUserId: managerUserResolved,
