@@ -23,7 +23,6 @@ import {
   CalendarClock,
   BarChart3,
   Stamp,
-  UserCog,
   type LucideIcon,
 } from "lucide-react";
 import type { CSSProperties } from "react";
@@ -66,8 +65,7 @@ const GROUPS: Group[] = [
       { href: "/dashboard/instructors", label: "Instructors", icon: GraduationCap, allow: STAFF },
       { href: "/dashboard/subject-sessions", label: "Subject Sessions", icon: CalendarClock, allow: STAFF },
       { href: "/dashboard/subjects", label: "Subjects", icon: BookOpen, allow: [] },
-      { href: "/dashboard/capabilities", label: "Capabilities", icon: Layers, allow: CAP },
-      { href: "/dashboard/capability-managers", label: "Capability Managers", icon: UserCog, allow: CAP },
+      { href: "/dashboard/capability-managers", label: "Capability Managers", icon: Layers, allow: CAP },
       { href: "/dashboard/backup-pool", label: "Backup Pool", icon: LifeBuoy, allow: CAP },
     ],
   },

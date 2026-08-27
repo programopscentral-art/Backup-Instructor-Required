@@ -6,6 +6,7 @@ import { DirectoryTable, type Column } from "@/components/directory/DirectoryTab
 import type { Row } from "@/lib/directory/useRealtimeTable";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { FadeIn } from "@/components/ui/motion";
+import { NewCapability } from "./new-capability";
 
 export const dynamic = "force-dynamic";
 
@@ -47,8 +48,13 @@ export default async function CapabilityManagersPage() {
       <PageHeader
         eyebrow="Directory"
         title="Capability Managers"
-        subtitle="Managers per subject vertical — a capability can have several. Everyone here is notified (Teams @mention + email + in-app) the moment a ticket lands for their subject. Add or remove one and it takes effect instantly."
+        subtitle="Subject verticals and the manager(s) who own each — a capability can have several. Everyone here is notified (Teams @mention + email + in-app) the moment a ticket lands for their subject. Add a new vertical or a manager and it takes effect instantly."
       />
+      {adminLike && (
+        <FadeIn>
+          <NewCapability />
+        </FadeIn>
+      )}
       <FadeIn delay={0.1}>
         <DirectoryTable
           table="capability_managers"

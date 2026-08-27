@@ -47,7 +47,7 @@ export default async function DashboardHome() {
     { label: "University Staff", value: staff, icon: <Users size={20} />, accent: "blue", href: "/dashboard/staff", allow: STAFF },
     { label: "Instructors", value: instructors, icon: <GraduationCap size={20} />, accent: "violet", href: "/dashboard/instructors", allow: STAFF },
     { label: "Backup Pool", value: pool, icon: <LifeBuoy size={20} />, accent: "emerald", href: "/dashboard/backup-pool", allow: CAP },
-    { label: "Capabilities", value: capabilities, icon: <Layers size={20} />, accent: "amber", href: "/dashboard/capabilities", allow: CAP },
+    { label: "Capabilities", value: capabilities, icon: <Layers size={20} />, accent: "amber", href: "/dashboard/capability-managers", allow: CAP },
     { label: "Subjects", value: subjects, icon: <BookOpen size={20} />, accent: "rose", href: "/dashboard/subjects", allow: [] as AppRole[] },
   ];
   const stats = allStats.filter(
