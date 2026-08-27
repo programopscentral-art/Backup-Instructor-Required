@@ -28,6 +28,33 @@ async function capabilityMentions(db: DB, capabilityId: string | null): Promise<
     .map((m) => ({ name: m.name, email: m.email as string }));
 }
 
+/** All active Capability Manager NAMES of a capability (with or without email),
+ *  for display on the card. Falls back to the lead name if the list is empty. */
+async function capabilityNames(db: DB, capabilityId: string | null, leadFallback: string | null): Promise<string | null> {
+  if (!capabilityId) return leadFallback;
+  const { data } = await db
+    .from("capability_managers")
+    .select("name")
+    .eq("capability_id", capabilityId)
+    .eq("status", "active")
+    .order("created_at", { ascending: true });
+  const names = ((data ?? []) as { name: string | null }[]).map((m) => m.name).filter((n): n is string => !!n);
+  return names.length ? names.join(", ") : leadFallback;
+}
+
+/** Merge mention lists, de-duplicating by (lower-cased) email. */
+function dedupeMentions(...lists: Mention[][]): Mention[] {
+  const seen = new Set<string>();
+  const out: Mention[] = [];
+  for (const m of lists.flat()) {
+    const key = m.email.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(m);
+  }
+  return out;
+}
+
 /** Everyone holding a given role, as @mentions (only those with an email). */
 async function roleMentions(db: DB, roles: string[]): Promise<Mention[]> {
   const { data: ras } = await db.from("role_assignments").select("user_id").in("role", roles);
@@ -87,7 +114,7 @@ export async function POST(req: Request) {
     const { data: tk } = await db
       .from("tickets")
       .select(
-        "ticket_no, mode, assigned_backup_id, assigned_backup_name, absent_instructor_name, absent_from, absent_to, time_from, time_to, invoice_due_at, universities(name), subjects(name), capabilities(manager_name)",
+        "ticket_no, mode, capability_id, assigned_backup_id, assigned_backup_name, absent_instructor_name, absent_from, absent_to, time_from, time_to, invoice_due_at, universities(name), subjects(name), capabilities(manager_name)",
       )
       .eq("id", body.ticket_id)
       .maybeSingle();
@@ -95,6 +122,7 @@ export async function POST(req: Request) {
     const rt = tk as unknown as {
       ticket_no: string;
       mode: string | null;
+      capability_id: string | null;
       assigned_backup_id: string | null;
       assigned_backup_name: string | null;
       absent_instructor_name: string | null;
@@ -113,7 +141,7 @@ export async function POST(req: Request) {
         ticketNo: rt.ticket_no,
         university: rt.universities?.name ?? null,
         subject: rt.subjects?.name ?? null,
-        capabilityManager: rt.capabilities?.manager_name ?? null,
+        capabilityManager: await capabilityNames(db, rt.capability_id, rt.capabilities?.manager_name ?? null),
         absentInstructor: rt.absent_instructor_name,
         backup: rt.assigned_backup_name,
         mode: rt.mode,
@@ -161,7 +189,14 @@ export async function POST(req: Request) {
   if (ev.to_status === "raised") {
     mentions = await capabilityMentions(db, t?.capability_id ?? null); // all CMs of the capability
     if (mentions.length === 0) mentions = await roleMentions(db, ["admin"]); // no CMs (new/unknown subject) → page admins
-  } else if (ev.to_status === "backup_assigned" || ev.to_status === "confirmed" || ev.to_status === "hod_approved") {
+  } else if (ev.to_status === "backup_assigned") {
+    // A backup was picked → ping the backup AND every Capability Manager of the
+    // subject (all owners, not just the lead), de-duplicated by email.
+    mentions = dedupeMentions(
+      await backupMention(db, t?.assigned_backup_id ?? null),
+      await capabilityMentions(db, t?.capability_id ?? null),
+    );
+  } else if (ev.to_status === "confirmed" || ev.to_status === "hod_approved") {
     mentions = await backupMention(db, t?.assigned_backup_id ?? null);
   } else if (ev.to_status === "ops_approved") {
     mentions = await roleMentions(db, ["hod", "admin"]);
@@ -179,6 +214,9 @@ export async function POST(req: Request) {
     amount = (inv as { amount: number | null } | null)?.amount ?? null;
   }
 
+  // Show ALL Capability Managers of the subject (comma-joined), not just the lead.
+  const cmDisplay = await capabilityNames(db, t?.capability_id ?? null, t?.capabilities?.manager_name ?? null);
+
   const payload: TeamsEvent = {
     ticketNo: t?.ticket_no ?? "—",
     fromStatus: ev.from_status,
@@ -187,7 +225,7 @@ export async function POST(req: Request) {
     actorName: ev.actor_name,
     university: t?.universities?.name ?? null,
     subject: t?.subjects?.name ?? null,
-    capabilityManager: t?.capabilities?.manager_name ?? null,
+    capabilityManager: cmDisplay,
     backup: t?.assigned_backup_name ?? null,
     mode: t?.mode ?? null,
     absentInstructor: t?.absent_instructor_name ?? null,

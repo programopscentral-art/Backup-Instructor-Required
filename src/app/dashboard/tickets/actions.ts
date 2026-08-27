@@ -199,6 +199,7 @@ export async function transitionTicket(_prev: ActionState, formData: FormData): 
   const actorName = ctx.profile?.full_name || ctx.email;
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
   let to: TicketStatus;
+  let assignNote: string | undefined;
 
   if (action === "assign") {
     const backupId = String(formData.get("assigned_backup_id") || "") || null;
@@ -206,17 +207,20 @@ export async function transitionTicket(_prev: ActionState, formData: FormData): 
     const mode = String(formData.get("mode") || "undecided");
     if (!backupName && !backupId) return { error: "Pick a backup instructor." };
     // A pool-selected backup must belong to this ticket's capability (no cross-
-    // capability assignment via a crafted id).
+    // capability assignment via a crafted id). We also read its email so we can
+    // flag assignments where the backup can't be reached (no notify / no upload).
+    let backupEmail: string | null = null;
     if (backupId) {
       const { data: bp } = await supabase
         .from("backup_instructor_pool")
-        .select("capability_id")
+        .select("capability_id, email")
         .eq("id", backupId)
         .maybeSingle();
       if (!bp) return { error: "Selected backup not found." };
       if (ticket.capability_id && bp.capability_id !== ticket.capability_id) {
         return { error: "That backup belongs to a different capability." };
       }
+      backupEmail = (bp as { email: string | null }).email;
     }
     to = "backup_assigned";
     update.assigned_backup_id = backupId;
@@ -224,6 +228,12 @@ export async function transitionTicket(_prev: ActionState, formData: FormData): 
     update.mode = mode;
     update.assigned_cm = ctx.userId;
     update.status = to;
+    // Audit note records reachability so an unreachable backup is never silent.
+    assignNote = `Backup assigned${backupName ? `: ${backupName}` : ""}.`;
+    if (!backupEmail) {
+      assignNote +=
+        " ⚠ No email on file — the backup won't be auto-notified or able to upload their claim; add an email in Backup Pool.";
+    }
   } else {
     const step = NEXT[action];
     if (!step) return { error: "Unknown action." };
@@ -246,7 +256,7 @@ export async function transitionTicket(_prev: ActionState, formData: FormData): 
   const { error } = await supabase.from("tickets").update(update).eq("id", ticketId);
   if (error) return { error: error.message };
 
-  await logEvent(supabase, ticketId, ctx.userId, actorName, from, to, note ?? NEXT[action]?.note);
+  await logEvent(supabase, ticketId, ctx.userId, actorName, from, to, note ?? assignNote ?? NEXT[action]?.note);
 
   // Fire the right notifications for this step: raiser, the assigned backup,
   // and the Ops/HOD approval queues — so every party is alerted end to end.
@@ -310,6 +320,17 @@ export async function transitionTicket(_prev: ActionState, formData: FormData): 
         title: `👤 You're the backup — ${f?.ticket_no}`,
         body: `You've been assigned as backup for ${subj} at ${uni} (${f?.mode}). Awaiting Ops confirmation — you'll be notified once it's dispatched.`,
       });
+      // Every Capability Manager of the subject's capability — so all owners
+      // (not just the lead) know their subject now has a backup. Skip the actor.
+      await notifyCapabilityManagers(
+        ticket.capability_id,
+        {
+          ticketId,
+          title: `👤 Backup assigned — ${f?.ticket_no}`,
+          body: `${f?.assigned_backup_name ?? "A backup"} was assigned for ${subj} at ${uni} (${f?.mode}), pending Ops confirmation.`,
+        },
+        ctx.email,
+      );
     } else if (action === "confirm") {
       await notifyBackup(f?.assigned_backup_id, {
         ticketId,

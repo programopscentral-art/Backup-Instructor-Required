@@ -38,23 +38,37 @@ export default async function TicketDetailPage({
     .maybeSingle();
   if (!ticket) notFound();
 
-  const [{ data: events }, { data: pool }, { data: allCaps }, { data: cmUsers }, { data: allUnis }, { data: allSubjects }] = await Promise.all([
+  const [{ data: events }, { data: pool }, { data: allCaps }, { data: cmUsers }, { data: allUnis }, { data: allSubjects }, { data: ticketCms }] = await Promise.all([
     supabase.from("ticket_events").select("*").eq("ticket_id", id).order("created_at", { ascending: true }),
     ticket.capability_id
       ? supabase
           .from("backup_instructor_pool")
-          .select("id, instructor_name, emp_id, availability_mode, current_status")
+          .select("id, instructor_name, emp_id, email, availability_mode, current_status")
           .eq("capability_id", ticket.capability_id)
       : Promise.resolve({ data: [] as never[] }),
     supabase.from("capabilities").select("id, name, manager_name").order("name"),
     supabase.rpc("list_capability_managers"),
     supabase.from("universities").select("id, name").eq("status", "active").order("name"),
     supabase.from("subjects").select("id, name").eq("status", "active").order("name"),
+    // All active Capability Managers of THIS ticket's capability (not just the lead).
+    ticket.capability_id
+      ? supabase
+          .from("capability_managers")
+          .select("name")
+          .eq("capability_id", ticket.capability_id)
+          .eq("status", "active")
+          .order("created_at", { ascending: true })
+      : Promise.resolve({ data: [] as never[] }),
   ]);
+
+  const cmNames = ((ticketCms ?? []) as { name: string | null }[])
+    .map((m) => m.name)
+    .filter((n): n is string => !!n)
+    .join(", ");
 
   // Smart-assign data: each pool instructor's active load + date clash with THIS
   // ticket's dates (prevents double-booking a backup already committed elsewhere).
-  type PoolRow = { id: string; instructor_name: string; emp_id: string | null; availability_mode: string; current_status: string };
+  type PoolRow = { id: string; instructor_name: string; emp_id: string | null; email: string | null; availability_mode: string; current_status: string };
   const poolRows = (pool ?? []) as PoolRow[];
   let enrichedPool: (PoolRow & { load: number; busy: boolean })[] = poolRows.map((p) => ({ ...p, load: 0, busy: false }));
   if (poolRows.length) {
@@ -178,7 +192,7 @@ export default async function TicketDetailPage({
     ["University", (ticket.universities as { name: string } | null)?.name ?? "—"],
     ["Subject", (ticket.subjects as { name: string } | null)?.name ?? "—"],
     ["Capability", cap?.name ?? "— (no CM yet)"],
-    ["Capability Manager", cap?.manager_name ?? "—"],
+    [cmNames.includes(",") ? "Capability Managers" : "Capability Manager", cmNames || cap?.manager_name || "—"],
     ["Absent instructor", ticket.absent_instructor_name],
     ["Reason", ticket.reason_category],
     ["Notes", ticket.reason],

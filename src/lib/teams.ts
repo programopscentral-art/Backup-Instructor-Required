@@ -116,7 +116,8 @@ export function buildTeamsCard(e: TeamsEvent): unknown {
   const facts: { title: string; value: string }[] = [];
   if (e.university) facts.push({ title: "University", value: e.university });
   if (e.subject) facts.push({ title: "Subject", value: e.subject });
-  if (e.capabilityManager) facts.push({ title: "Capability Manager", value: e.capabilityManager });
+  if (e.capabilityManager)
+    facts.push({ title: e.capabilityManager.includes(",") ? "Capability Managers" : "Capability Manager", value: e.capabilityManager });
   if (e.absentInstructor && e.toStatus === "raised") facts.push({ title: "Absent", value: e.absentInstructor });
   if (e.backup) facts.push({ title: "Backup", value: e.backup });
   if (e.mode && e.mode !== "undecided") facts.push({ title: "Mode", value: MODE_LABEL[e.mode] ?? e.mode });
@@ -165,7 +166,8 @@ export function buildReminderCard(d: ReminderDetails): unknown {
   const facts: { title: string; value: string }[] = [];
   if (d.university) facts.push({ title: "University", value: d.university });
   if (d.subject) facts.push({ title: "Subject", value: d.subject });
-  if (d.capabilityManager) facts.push({ title: "Capability Manager", value: d.capabilityManager });
+  if (d.capabilityManager)
+    facts.push({ title: d.capabilityManager.includes(",") ? "Capability Managers" : "Capability Manager", value: d.capabilityManager });
   if (d.absentInstructor) facts.push({ title: "Absent instructor", value: d.absentInstructor });
   if (d.backup) facts.push({ title: "Backup (you)", value: d.backup });
   if (d.mode && d.mode !== "undecided") facts.push({ title: "Mode", value: MODE_LABEL[d.mode] ?? d.mode });

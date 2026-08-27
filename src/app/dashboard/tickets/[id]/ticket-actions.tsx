@@ -9,6 +9,7 @@ interface PoolItem {
   id: string;
   instructor_name: string;
   emp_id: string | null;
+  email: string | null; // needed for notifications, login & invoice upload
   availability_mode: string;
   current_status: string;
   load?: number;
@@ -137,6 +138,8 @@ export function TicketActions({
   );
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 function AssignForm({
   ticketId,
   pool,
@@ -149,41 +152,90 @@ function AssignForm({
   const [state, action, pending] = useActionState<ActionState, FormData>(transitionTicket, {});
   const supabase = createClient();
   const [localPool, setLocalPool] = useState(pool);
+  const [selectedId, setSelectedId] = useState("");
+  const [typedName, setTypedName] = useState("");
   const [addingPool, setAddingPool] = useState(false);
   const [newName, setNewName] = useState("");
+  const [newEmail, setNewEmail] = useState("");
   const [newEmp, setNewEmp] = useState("");
+  const [newMode, setNewMode] = useState("both");
   const [busy, setBusy] = useState(false);
   const [poolErr, setPoolErr] = useState<string | null>(null);
+  const [poolInfo, setPoolInfo] = useState<string | null>(null);
 
   async function addToPool() {
-    if (!newName.trim()) return setPoolErr("Enter an instructor name.");
+    const name = newName.trim();
+    const email = newEmail.trim().toLowerCase();
+    if (!name) return setPoolErr("Enter an instructor name.");
+    // Email is required here so the backup can actually be notified, sign in,
+    // and upload their invoice — the whole reason to add them.
+    if (!email) return setPoolErr("Enter an email — without it the backup can't be notified or upload a claim.");
+    if (!EMAIL_RE.test(email)) return setPoolErr("Enter a valid email address.");
     if (!capabilityId) return setPoolErr("No capability set on this ticket.");
+    // Already in this capability's pool? Reuse that row instead of duplicating.
+    const dupe = localPool.find((p) => (p.email ?? "").toLowerCase() === email);
+    if (dupe) {
+      setSelectedId(dupe.id);
+      setTypedName("");
+      setAddingPool(false);
+      setPoolErr(null);
+      setPoolInfo(`${dupe.instructor_name} is already in this pool — selected them.`);
+      return;
+    }
     setBusy(true);
     setPoolErr(null);
+    setPoolInfo(null);
     const { data, error } = await supabase
       .from("backup_instructor_pool")
       .insert({
-        instructor_name: newName.trim(),
+        instructor_name: name,
+        email,
         emp_id: newEmp.trim() || null,
         capability_id: capabilityId,
-        availability_mode: "both",
+        availability_mode: newMode,
         current_status: "available",
         status: "active",
       })
-      .select("id, instructor_name, emp_id, availability_mode, current_status")
+      .select("id, instructor_name, emp_id, email, availability_mode, current_status")
       .single();
     setBusy(false);
-    if (error || !data) return setPoolErr(error?.message ?? "Failed to add.");
+    if (error || !data) {
+      return setPoolErr(
+        /duplicate|unique/i.test(error?.message ?? "")
+          ? "A backup with that email already exists in this pool."
+          : error?.message ?? "Failed to add.",
+      );
+    }
     setLocalPool((l) => [...l, data]);
+    // Auto-select the just-added backup so the next click is simply "Assign".
+    setSelectedId(data.id);
+    setTypedName("");
     setNewName("");
+    setNewEmail("");
     setNewEmp("");
+    setNewMode("both");
     setAddingPool(false);
   }
+
+  const selectedPool = localPool.find((p) => p.id === selectedId) || null;
+  // The name/id that will actually be submitted (pool selection wins over typed).
+  const submitId = selectedPool ? selectedPool.id : "";
+  const submitName = selectedPool ? selectedPool.instructor_name : typedName.trim();
+  const canSubmit = !!submitName;
+
+  // Reachability: will this backup actually get notified / be able to upload?
+  const unreachable =
+    (selectedPool && !selectedPool.email) || (!selectedPool && !!typedName.trim());
+  const unreachableMsg = selectedPool
+    ? "This backup has no email on file, so they won't be notified and can't sign in to upload their invoice. Add an email in Directories → Backup Pool first."
+    : "Typed-in names aren't in the pool, so this backup can't be notified or upload a claim. Use “+ Add to pool” with an email instead.";
 
   return (
     <form action={action} className="space-y-4">
       <input type="hidden" name="ticket_id" value={ticketId} />
       <input type="hidden" name="action" value="assign" />
+      <input type="hidden" name="assigned_backup_id" value={submitId} />
+      <input type="hidden" name="assigned_backup_name" value={submitName} />
       <div>
         <div className="flex items-center justify-between">
           <label className="label">Backup instructor (from pool)</label>
@@ -195,28 +247,47 @@ function AssignForm({
         </div>
         {addingPool ? (
           <div className="space-y-2 rounded-xl border border-[color:var(--line)] bg-[color:var(--cream)] p-3">
-            <input className="input" placeholder="Backup instructor name" value={newName} onChange={(e) => setNewName(e.target.value)} autoFocus />
-            <input className="input" placeholder="Emp ID (optional)" value={newEmp} onChange={(e) => setNewEmp(e.target.value)} />
+            <div>
+              <label className="mb-1 block text-[11px] font-semibold text-[color:var(--muted)]">Backup instructor name <span className="text-[color:var(--rose)]">*</span></label>
+              <input className="input" placeholder="Full name" value={newName} onChange={(e) => setNewName(e.target.value)} autoFocus />
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-semibold text-[color:var(--muted)]">Email — for login &amp; alerts <span className="text-[color:var(--rose)]">*</span></label>
+              <input className="input" type="email" placeholder="name@nxtwave.co.in" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} />
+            </div>
             <div className="flex gap-2">
+              <div className="flex-1">
+                <label className="mb-1 block text-[11px] font-semibold text-[color:var(--muted)]">Emp ID</label>
+                <input className="input" placeholder="Optional" value={newEmp} onChange={(e) => setNewEmp(e.target.value)} />
+              </div>
+              <div className="flex-1">
+                <label className="mb-1 block text-[11px] font-semibold text-[color:var(--muted)]">Mode</label>
+                <select className="select" value={newMode} onChange={(e) => setNewMode(e.target.value)}>
+                  <option value="both">Both</option>
+                  <option value="online">Online</option>
+                  <option value="offline">Offline</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-2 pt-1">
               <button type="button" onClick={addToPool} disabled={busy} className="btn btn-primary btn-sm">
-                Add to pool
+                {busy ? "Adding…" : "Add to pool"}
               </button>
-              <button type="button" onClick={() => setAddingPool(false)} className="btn btn-ghost btn-sm">
+              <button type="button" onClick={() => { setAddingPool(false); setPoolErr(null); }} className="btn btn-ghost btn-sm">
                 Cancel
               </button>
             </div>
-            <p className="text-xs text-[color:var(--faint)]">Permanently adds this backup to the capability&apos;s pool.</p>
+            <p className="text-xs text-[color:var(--faint)]">Permanently adds this backup to the capability&apos;s pool. The email lets them get alerts, sign in, and upload their invoice.</p>
             {poolErr && <p className="text-xs text-[color:var(--rose)]">{poolErr}</p>}
           </div>
         ) : localPool.length > 0 ? (
           <>
             <select
-              name="assigned_backup_id"
               className="select"
+              value={selectedId}
               onChange={(e) => {
-                const opt = e.target.selectedOptions[0];
-                const hidden = e.currentTarget.form?.elements.namedItem("assigned_backup_name") as HTMLInputElement | null;
-                if (hidden) hidden.value = opt?.dataset.name ?? "";
+                setSelectedId(e.target.value);
+                if (e.target.value) setTypedName("");
               }}
             >
               <option value="">Select…</option>
@@ -230,16 +301,17 @@ function AssignForm({
                 .map((p) => {
                   const tag = poolTag(p);
                   return (
-                    <option key={p.id} value={p.id} data-name={p.instructor_name}>
+                    <option key={p.id} value={p.id}>
                       {tag.rank === 0 ? "✓ " : tag.rank >= 3 ? "⚠ " : ""}
                       {p.instructor_name}
                       {p.emp_id ? ` (${p.emp_id})` : ""} · {p.availability_mode} · {tag.text}
+                      {p.email ? "" : " · ✉ no email"}
                     </option>
                   );
                 })}
             </select>
             <p className="mt-1.5 text-xs text-[color:var(--faint)]">
-              Sorted best-first · <span className="font-semibold text-[color:var(--rose)]">⚠ busy</span> = already booked for these dates · <span className="font-semibold">N active</span> = current load
+              Sorted best-first · <span className="font-semibold text-[color:var(--rose)]">⚠ busy</span> = already booked for these dates · <span className="font-semibold">N active</span> = current load · <span className="font-semibold">✉ no email</span> = can&apos;t be notified
             </p>
           </>
         ) : (
@@ -248,17 +320,15 @@ function AssignForm({
           </p>
         )}
       </div>
-      <input type="hidden" name="assigned_backup_name" defaultValue="" />
       <div>
         <label className="label">…or type a backup name</label>
         <input
           className="input"
           placeholder="Backup instructor name"
+          value={typedName}
           onChange={(e) => {
-            const hidden = e.currentTarget.form?.elements.namedItem(
-              "assigned_backup_name",
-            ) as HTMLInputElement | null;
-            if (hidden && e.target.value) hidden.value = e.target.value;
+            setTypedName(e.target.value);
+            if (e.target.value) setSelectedId("");
           }}
         />
       </div>
@@ -269,12 +339,22 @@ function AssignForm({
           <option value="online">Online</option>
         </select>
       </div>
+      {poolInfo && (
+        <p className="rounded-lg border border-[#bfe3cb] bg-[#eaf6ee] px-3 py-2 text-xs text-[#177245]">
+          ✓ {poolInfo}
+        </p>
+      )}
+      {unreachable && (
+        <p className="rounded-lg border border-[#f3d19a] bg-[#fdf6e9] px-3 py-2 text-xs text-[#8a5a00]">
+          ⚠ {unreachableMsg}
+        </p>
+      )}
       {state.error && (
         <p className="rounded-lg border border-[#f6cdd6] bg-[#fdeef1] px-3 py-2 text-sm text-[color:var(--rose)]">
           {state.error}
         </p>
       )}
-      <button type="submit" disabled={pending} className="btn btn-primary w-full">
+      <button type="submit" disabled={pending || !canSubmit} className="btn btn-primary w-full">
         {pending ? "Assigning…" : "Assign backup"}
       </button>
     </form>

@@ -30,8 +30,16 @@ export async function notifyBackup(backupId: string | null | undefined, msg: Msg
   });
 }
 
-/** Notify every active Capability Manager of a capability (in-app + email). */
-export async function notifyCapabilityManagers(capabilityId: string | null | undefined, msg: Msg) {
+/**
+ * Notify every active Capability Manager of a capability (in-app + email).
+ * `excludeEmail` skips one person (e.g. the actor who just performed the action,
+ * so they don't get pinged about their own change).
+ */
+export async function notifyCapabilityManagers(
+  capabilityId: string | null | undefined,
+  msg: Msg,
+  excludeEmail?: string | null,
+) {
   if (!capabilityId) return;
   const db = createAdminClient();
   const { data: cms } = await db
@@ -39,9 +47,11 @@ export async function notifyCapabilityManagers(capabilityId: string | null | und
     .select("email")
     .eq("capability_id", capabilityId)
     .eq("status", "active");
+  const skip = excludeEmail?.trim().toLowerCase() || null;
   for (const cm of (cms ?? []) as { email: string | null }[]) {
     const email = cm.email;
     if (!email) continue;
+    if (skip && email.toLowerCase() === skip) continue;
     const { data: prof } = await db.from("profiles").select("id").ilike("email", email).maybeSingle();
     await notify(db, {
       recipientUserId: (prof as { id: string } | null)?.id ?? null,
