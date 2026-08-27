@@ -6,7 +6,7 @@ import { DirectoryTable, type Column } from "@/components/directory/DirectoryTab
 import type { Row } from "@/lib/directory/useRealtimeTable";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { FadeIn } from "@/components/ui/motion";
-import { NewCapability } from "./new-capability";
+import { CapabilitiesPanel, type Vertical } from "./capabilities-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -16,10 +16,21 @@ export default async function CapabilityManagersPage() {
 
   const refs = await getRefs();
   const supabase = await createAuthedClient();
-  const { data } = await supabase
-    .from("capability_managers")
-    .select("id, capability_id, name, email, status")
-    .order("name");
+  const [{ data }, { data: caps }] = await Promise.all([
+    supabase.from("capability_managers").select("id, capability_id, name, email, status").order("name"),
+    supabase.from("capabilities").select("id, name, status").order("name"),
+  ]);
+
+  const cmCount = new Map<string, number>();
+  for (const cm of (data ?? []) as { capability_id: string; status: string }[]) {
+    if (cm.status === "active") cmCount.set(cm.capability_id, (cmCount.get(cm.capability_id) ?? 0) + 1);
+  }
+  const verticals: Vertical[] = ((caps ?? []) as { id: string; name: string; status: string }[]).map((v) => ({
+    id: v.id,
+    name: v.name,
+    status: v.status,
+    cms: cmCount.get(v.id) ?? 0,
+  }));
 
   const columns: Column[] = [
     { key: "name", label: "Capability Manager", required: true },
@@ -50,11 +61,9 @@ export default async function CapabilityManagersPage() {
         title="Capability Managers"
         subtitle="Subject verticals and the manager(s) who own each — a capability can have several. Everyone here is notified (Teams @mention + email + in-app) the moment a ticket lands for their subject. Add a new vertical or a manager and it takes effect instantly."
       />
-      {adminLike && (
-        <FadeIn>
-          <NewCapability />
-        </FadeIn>
-      )}
+      <FadeIn>
+        <CapabilitiesPanel verticals={verticals} canWrite={adminLike} />
+      </FadeIn>
       <FadeIn delay={0.1}>
         <DirectoryTable
           table="capability_managers"
