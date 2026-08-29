@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth/session";
 import { createAuthedClient } from "@/lib/supabase/server";
 import { isAdminLike } from "@/lib/auth/roles";
@@ -23,6 +24,10 @@ export default async function BackupPoolPage() {
     .map((a) => a.scope_id as string);
   const fullAccess = adminLike || globalCM;
   const canWrite = fullAccess || capIds.length > 0;
+  // The backup pool is for Capability Managers (their candidates) + Ops/HOD —
+  // matches the nav & footer. Others (staff/instructor) are sent home.
+  if (!ctx) redirect("/login");
+  if (!canWrite) redirect("/dashboard");
 
   const refs = await getRefs();
   // Scoped CMs can only file backups under their own capabilities.

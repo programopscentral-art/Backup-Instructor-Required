@@ -1,6 +1,9 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ReceiptText, AlertTriangle, ArrowUpRight } from "lucide-react";
 import { createAuthedClient } from "@/lib/supabase/server";
+import { getSessionContext } from "@/lib/auth/session";
+import { isAdminLike } from "@/lib/auth/roles";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { FadeIn } from "@/components/ui/motion";
 import { InvoicesView, type InvoiceRow as ViewRow } from "./invoices-view";
@@ -28,6 +31,11 @@ interface PendingTicket {
 }
 
 export default async function InvoicesPage() {
+  // Invoices (money + approval chain) are Ops/HOD only — matches the nav & footer.
+  const ctx = await getSessionContext();
+  if (!ctx) redirect("/login");
+  if (!isAdminLike(ctx.roles)) redirect("/dashboard");
+
   const supabase = await createAuthedClient();
 
   const [{ data: inv }, { data: pend }] = await Promise.all([

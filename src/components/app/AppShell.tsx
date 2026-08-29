@@ -57,7 +57,7 @@ const INSTR = ["instructor"] as AppRole[];
 
 const GROUPS: Group[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "My Assignments", href: "/dashboard/my-assignments", icon: GraduationCap, allow: INSTR },
+  { label: "My Assignments", href: "/dashboard/my-assignments", icon: GraduationCap, allow: [...INSTR, ...STAFF, ...CAP] },
   {
     label: "Directories",
     items: [
@@ -342,7 +342,7 @@ export function AppShell({
       </AnimatePresence>
 
       <main className="mx-auto max-w-7xl px-5 py-8 sm:px-8">{children}</main>
-      <Footer />
+      <Footer roles={roles} team={theme.team} />
     </div>
   );
 }

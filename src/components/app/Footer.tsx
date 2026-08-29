@@ -2,22 +2,63 @@ import Link from "next/link";
 import Image from "next/image";
 import type { CSSProperties } from "react";
 import { ArrowUpRight, ShieldCheck } from "lucide-react";
+import { isAdminLike, type AppRole } from "@/lib/auth/roles";
 
-const PLATFORM: [string, string][] = [
-  ["Dashboard", "/dashboard"],
-  ["Tickets", "/dashboard/tickets"],
-  ["My Assignments", "/dashboard/my-assignments"],
-  ["Analytics", "/dashboard/analytics"],
+interface FLink {
+  label: string;
+  href: string;
+  allow?: AppRole[]; // undefined = everyone; [] = admin/HOD only (mirrors the nav)
+}
+
+const STAFF: AppRole[] = ["university_staff"];
+const CAP: AppRole[] = ["capability_manager", "cma"];
+const INSTR: AppRole[] = ["instructor"];
+
+// Same access rules as the top nav (AppShell) so the footer never links a role
+// to a page it can't use.
+const PLATFORM: FLink[] = [
+  { label: "Dashboard", href: "/dashboard" },
+  { label: "Tickets", href: "/dashboard/tickets" },
+  { label: "My Assignments", href: "/dashboard/my-assignments", allow: [...INSTR, ...STAFF, ...CAP] },
+  { label: "Analytics", href: "/dashboard/analytics", allow: STAFF },
 ];
-const OPS: [string, string][] = [
-  ["Invoices", "/dashboard/invoices"],
-  ["HOD Approvals", "/dashboard/hod-approvals"],
-  ["Backup Pool", "/dashboard/backup-pool"],
-  ["Logs", "/dashboard/logs"],
+const OPS: FLink[] = [
+  { label: "Invoices", href: "/dashboard/invoices", allow: [] },
+  { label: "HOD Approvals", href: "/dashboard/hod-approvals", allow: [] },
+  { label: "Backup Pool", href: "/dashboard/backup-pool", allow: CAP },
+  { label: "Logs", href: "/dashboard/logs" },
 ];
 
-export function Footer() {
+function LinkList({ title, links }: { title: string; links: FLink[] }) {
+  if (links.length === 0) return null;
+  return (
+    <div>
+      <p className="mb-4 text-xs font-bold uppercase tracking-[0.16em] text-white/50">{title}</p>
+      <ul className="space-y-2.5">
+        {links.map((l) => (
+          <li key={l.href}>
+            <Link
+              href={l.href}
+              className="group inline-flex items-center gap-1.5 text-sm text-white/80 transition-colors hover:text-white"
+            >
+              {l.label}
+              <ArrowUpRight size={13} className="opacity-0 transition-opacity group-hover:opacity-100" />
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export function Footer({ roles = [], team }: { roles?: AppRole[]; team?: string }) {
   const year = new Date().getFullYear();
+  const adminLike = isAdminLike(roles);
+  const canSee = (l: FLink) => adminLike || !l.allow || l.allow.some((r) => roles.includes(r));
+  const platform = PLATFORM.filter(canSee);
+  const ops = OPS.filter(canSee);
+  const teamLabel = team || "Program Ops";
+
   return (
     <footer className="relative mt-20">
       {/* glowing gradient hairline */}
@@ -42,9 +83,9 @@ export function Footer() {
 
         <div className="relative z-10 mx-auto max-w-7xl px-5 py-14 sm:px-8">
           <div className="grid gap-10 md:grid-cols-[1.6fr_1fr_1fr]">
-            {/* Brand */}
+            {/* Brand — bg-[#ffffff] (not the bg-white utility) so it stays white in dark mode */}
             <div>
-              <div className="inline-flex items-center rounded-2xl bg-white p-3 shadow-lg">
+              <div className="inline-flex items-center rounded-2xl bg-[#ffffff] p-3 shadow-lg">
                 <Image
                   src="/niat-logo.png"
                   alt="NIAT — NxtWave of Innovation in Advanced Technologies"
@@ -54,48 +95,16 @@ export function Footer() {
                 />
               </div>
               <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/70">
-                Backup OS · Program Ops
+                Backup OS · {teamLabel}
               </p>
               <p className="mt-2 max-w-sm text-sm leading-relaxed text-white/60">
                 Arranging backup instructors across 40+ campuses — raised, allocated, delivered, and settled with full accountability.
               </p>
             </div>
 
-            {/* Platform links */}
-            <div>
-              <p className="mb-4 text-xs font-bold uppercase tracking-[0.16em] text-white/50">Platform</p>
-              <ul className="space-y-2.5">
-                {PLATFORM.map(([label, href]) => (
-                  <li key={href}>
-                    <Link
-                      href={href}
-                      className="group inline-flex items-center gap-1.5 text-sm text-white/80 transition-colors hover:text-white"
-                    >
-                      {label}
-                      <ArrowUpRight size={13} className="opacity-0 transition-opacity group-hover:opacity-100" />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Operations links */}
-            <div>
-              <p className="mb-4 text-xs font-bold uppercase tracking-[0.16em] text-white/50">Operations</p>
-              <ul className="space-y-2.5">
-                {OPS.map(([label, href]) => (
-                  <li key={href}>
-                    <Link
-                      href={href}
-                      className="group inline-flex items-center gap-1.5 text-sm text-white/80 transition-colors hover:text-white"
-                    >
-                      {label}
-                      <ArrowUpRight size={13} className="opacity-0 transition-opacity group-hover:opacity-100" />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
+            {/* Role-filtered link columns */}
+            <LinkList title="Platform" links={platform} />
+            <LinkList title="Operations" links={ops} />
           </div>
 
           {/* bottom bar */}
@@ -109,7 +118,7 @@ export function Footer() {
               </span>
               <span className="inline-flex items-center gap-1.5">
                 <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
-                Program Ops · Live
+                {teamLabel} · Live
               </span>
             </div>
           </div>
