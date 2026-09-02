@@ -29,6 +29,11 @@ export function CapabilitiesPanel({ verticals, canWrite }: { verticals: Vertical
   async function add() {
     const n = newName.trim();
     if (!n) return;
+    // Case-insensitive guard (the DB unique on name is case-sensitive, so "gen ai"
+    // would otherwise slip past "Gen AI").
+    if (verticals.some((v) => v.name.trim().toLowerCase() === n.toLowerCase())) {
+      return setErr("That vertical already exists.");
+    }
     setBusy(true);
     setErr(null);
     const { error } = await supabase().from("capabilities").insert({ name: n, status: "active" });

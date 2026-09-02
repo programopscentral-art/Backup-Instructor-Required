@@ -39,8 +39,8 @@ export async function notifyCapabilityManagers(
   capabilityId: string | null | undefined,
   msg: Msg,
   excludeEmail?: string | null,
-) {
-  if (!capabilityId) return;
+): Promise<number> {
+  if (!capabilityId) return 0;
   const db = createAdminClient();
   const { data: cms } = await db
     .from("capability_managers")
@@ -48,6 +48,7 @@ export async function notifyCapabilityManagers(
     .eq("capability_id", capabilityId)
     .eq("status", "active");
   const skip = excludeEmail?.trim().toLowerCase() || null;
+  let notified = 0;
   for (const cm of (cms ?? []) as { email: string | null }[]) {
     const email = cm.email;
     if (!email) continue;
@@ -61,7 +62,9 @@ export async function notifyCapabilityManagers(
       body: msg.body,
       ticketId: msg.ticketId,
     });
+    notified++;
   }
+  return notified;
 }
 
 /** Notify everyone holding a given role (admin / hod). */

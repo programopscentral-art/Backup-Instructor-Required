@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notify } from "@/lib/notify";
-import { zohoSecretOk, likeEscape } from "@/lib/zoho/security";
+import { zohoSecretOk } from "@/lib/zoho/security";
+import { resolveSubjectName } from "@/lib/tickets/subject-routing";
 
 /**
  * Zoho Creator → NIAT webhook (READ-ONLY intake).
@@ -202,43 +203,13 @@ export async function POST(req: Request) {
     universityId = resolveUniversityId(universityRaw, (uniRows ?? []) as UniRow[]);
   }
 
-  // Resolve subject (+ its capability). Match an existing subject; if the Zoho
-  // subject doesn't exist in the product yet, auto-create it so it always shows
-  // and an admin can assign a Capability Manager to it (future tickets then route
-  // automatically). Keeps the product's subject list in sync with Zoho.
-  let subjectId: string | null = null;
-  let capabilityId: string | null = null;
-  if (subjectRaw) {
-    // Exact (case-insensitive) first, then a contains match.
-    let row: { id: string; capability_id: string | null } | undefined;
-    const { data: exactSubj } = await db
-      .from("subjects")
-      .select("id, capability_id")
-      .ilike("name", likeEscape(subjectRaw))
-      .limit(1);
-    row = exactSubj?.[0];
-    if (!row) {
-      const { data: likeSubj } = await db
-        .from("subjects")
-        .select("id, capability_id")
-        .ilike("name", `%${likeEscape(subjectRaw)}%`)
-        .limit(1);
-      row = likeSubj?.[0];
-    }
-    if (row) {
-      subjectId = row.id;
-      capabilityId = row.capability_id ?? null;
-    } else {
-      const normalized = subjectRaw.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-      const { data: created } = await db
-        .from("subjects")
-        .insert({ name: subjectRaw, normalized_name: normalized || subjectRaw.toLowerCase(), status: "active" })
-        .select("id, capability_id")
-        .maybeSingle();
-      subjectId = (created as { id: string } | null)?.id ?? null;
-      capabilityId = (created as { capability_id: string | null } | null)?.capability_id ?? null;
-    }
-  }
+  // Resolve subject → capability using the subject VERTICALS (capabilities) as the
+  // primary routing key: Zoho sends a vertical name (e.g. "Gen AI"), which maps
+  // straight to that capability's CMs. Falls back to a legacy granular subject,
+  // then auto-creates an unmapped subject (→ needs admin) for anything unknown.
+  const { capabilityId, subjectId } = subjectRaw
+    ? await resolveSubjectName(db, subjectRaw)
+    : { capabilityId: null, subjectId: null };
 
   // Resolve the raiser's app account (if they have one), and — because the Zoho
   // form has no University field — derive their campus from their staff scope

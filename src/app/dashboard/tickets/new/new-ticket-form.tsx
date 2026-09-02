@@ -49,7 +49,9 @@ export function NewTicketForm({
   const supabase = createClient();
 
   const [universityId, setUniversityId] = useState(universities.length === 1 ? universities[0].id : "");
-  const [subjectId, setSubjectId] = useState("");
+  // "Subject" is now the subject vertical (capability) NAME — the routing key shared
+  // with Zoho. The resolver on the server maps it to the capability + its CMs.
+  const [subjectName, setSubjectName] = useState("");
 
   // Reason (dynamic)
   const [reasonList, setReasonList] = useState(reasons);
@@ -72,8 +74,10 @@ export function NewTicketForm({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const subject = subjects.find((s) => s.id === subjectId);
-  const noCM = subject && !subject.capability;
+  const OTHER = "Other (not listed)";
+  const subject = subjects.find((s) => s.name === subjectName);
+  const isOther = subjectName === OTHER;
+  const noCM = !!subject && !subject.manager; // a real vertical, but no CM yet
 
   const universityInstructors = useMemo(
     () => instrList.filter((i) => i.university_id === universityId),
@@ -119,7 +123,6 @@ export function NewTicketForm({
         instructor_name: newInstrName.trim(),
         emp_id: newInstrEmp.trim() || null,
         university_id: universityId,
-        subject_id: subjectId || null,
         status: "active",
       })
       .select("id, instructor_name, emp_id, university_id")
@@ -160,39 +163,45 @@ export function NewTicketForm({
           </select>
         </div>
         <div>
-          <label className="label">Subject *</label>
-          <select name="subject_id" required value={subjectId} onChange={(e) => setSubjectId(e.target.value)} className="select">
+          <label className="label">Subject (vertical) *</label>
+          <select required value={subjectName} onChange={(e) => setSubjectName(e.target.value)} className="select">
             <option value="" disabled>
               Select…
             </option>
             {subjects.map((s) => (
-              <option key={s.id} value={s.id}>
+              <option key={s.id} value={s.name}>
                 {s.name}
               </option>
             ))}
+            <option value={OTHER}>Other (not listed)</option>
           </select>
+          <input type="hidden" name="subject_name" value={subjectName} />
         </div>
       </div>
 
-      {subject && subject.capability && (
+      {subject && subject.manager && (
         <p className="rounded-xl border border-[color:var(--line)] bg-[color:var(--cream-2)] px-3.5 py-2.5 text-sm text-[color:var(--muted)]">
-          Routes to <span className="font-semibold text-[color:var(--ink)]">{subject.capability}</span>
-          {subject.manager && (
-            <>
-              {" "}· CM <span className="font-semibold text-[color:var(--ink)]">{subject.manager}</span>
-            </>
-          )}
+          Routes to <span className="font-semibold text-[color:var(--ink)]">{subject.name}</span> · CM{" "}
+          <span className="font-semibold text-[color:var(--ink)]">{subject.manager}</span>
         </p>
       )}
       {noCM && (
         <div className="flex items-start gap-2.5 rounded-xl border border-[#f6cdd6] bg-[#fdeef1] px-3.5 py-2.5 text-sm text-[color:var(--rose)]">
           <AlertTriangle size={17} className="mt-0.5 flex-none" />
           <span>
-            This subject has <strong>no Capability Manager</strong> yet. Use{" "}
+            This vertical has <strong>no Capability Manager</strong> yet. Use{" "}
             <button type="button" onClick={() => setNotifyOpen(true)} className="font-semibold underline">
               Notify Capability Managers
             </button>{" "}
-            below to alert one, or an admin can add a CM in Capabilities.
+            below to alert one, or add a CM in Directory → Capability Managers.
+          </span>
+        </div>
+      )}
+      {isOther && (
+        <div className="flex items-start gap-2.5 rounded-xl border border-[#f3d19a] bg-[#fdf6e9] px-3.5 py-2.5 text-sm text-[#8a5a00]">
+          <AlertTriangle size={17} className="mt-0.5 flex-none" />
+          <span>
+            <strong>New subject.</strong> This raises the ticket and alerts the admins. An admin adds it as a subject vertical + assigns a Capability Manager, then it routes automatically.
           </span>
         </div>
       )}

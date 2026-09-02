@@ -88,10 +88,12 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: true, instructors });
   }
 
-  // Default: all top-level option lists.
-  const [{ data: unis }, { data: subs }, { data: reasons }] = await Promise.all([
+  // Default: all top-level option lists. The Subject dropdown is the subject
+  // VERTICALS (capabilities) — the single source of truth that routes to CMs — so
+  // Zoho always mirrors Directory → Capability Managers with no manual edits.
+  const [{ data: unis }, { data: caps }, { data: reasons }] = await Promise.all([
     db.from("universities").select("name").eq("status", "active").order("name"),
-    db.from("subjects").select("name").eq("status", "active").order("name"),
+    db.from("capabilities").select("name").eq("status", "active").order("name"),
     db.from("ticket_reasons").select("label").order("label"),
   ]);
 
@@ -100,7 +102,7 @@ export async function GET(req: Request) {
     // "Other (not listed)" lets a raiser flag a new/unlisted subject — it lands
     // with no capability and instantly alerts the admin (Teams + email) to add it.
     universities: (unis ?? []).map((u) => u.name),
-    subjects: [...(subs ?? []).map((s) => s.name), "Other (not listed)"],
+    subjects: [...(caps ?? []).map((c) => c.name), "Other (not listed)"],
     reasons: (reasons ?? []).map((r) => r.label),
     modes: ["No preference", "Online", "Offline"],
   });

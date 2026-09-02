@@ -3,10 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { getSessionContext } from "@/lib/auth/session";
 import { createAuthedClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdminLike } from "@/lib/auth/roles";
+import { resolveSubjectName, ensureSubject } from "@/lib/tickets/subject-routing";
 import { notify } from "@/lib/notify";
-import { notifyBackup, notifyHod, notifyCapabilityManagers } from "@/lib/notify-targets";
-import { closeZohoTicket } from "@/lib/zoho/close";
+import { notifyBackup, notifyHod, notifyOps, notifyCapabilityManagers } from "@/lib/notify-targets";
+import { setZohoStatus, ZOHO_STATUS } from "@/lib/zoho/close";
 import { STATUS_META, type TicketStatus } from "@/lib/tickets/status";
 
 export interface ActionState {
@@ -40,7 +42,7 @@ export async function createTicket(_prev: ActionState, formData: FormData): Prom
   if (!ctx) return { error: "Not signed in." };
 
   const university_id = String(formData.get("university_id") || "");
-  const subject_id = String(formData.get("subject_id") || "");
+  const subject_name = String(formData.get("subject_name") || "").trim();
   const absent_instructor_name = String(formData.get("absent_instructor_name") || "").trim();
   const absent_instructor_id = String(formData.get("absent_instructor_id") || "") || null;
   const reason_category = String(formData.get("reason_category") || "").trim() || null;
@@ -56,19 +58,18 @@ export async function createTicket(_prev: ActionState, formData: FormData): Prom
     .filter(Boolean);
 
   if (!university_id) return { error: "Select a university." };
-  if (!subject_id) return { error: "Select a subject." };
+  if (!subject_name) return { error: "Select a subject." };
   if (!absent_instructor_name) return { error: "Select the absent instructor." };
 
   const supabase = await createAuthedClient();
 
-  // Resolve the owning capability from the (normalized) subject.
-  const { data: subject } = await supabase
-    .from("subjects")
-    .select("capability_id")
-    .eq("id", subject_id)
-    .maybeSingle();
-
-  const capability_id = (subject?.capability_id as string | null) ?? null;
+  // Resolve subject → capability with the SAME vertical-first resolver Zoho uses,
+  // so the product and Zoho route identically. Subject rows are system-managed
+  // reference data, so the resolve runs on the service-role client.
+  const { capabilityId: capability_id, subjectId: subject_id } = await resolveSubjectName(
+    createAdminClient(),
+    subject_name,
+  );
 
   const { data: ticket, error } = await supabase
     .from("tickets")
@@ -115,7 +116,42 @@ export async function createTicket(_prev: ActionState, formData: FormData): Prom
     capability_id ? "Ticket raised." : "Raised — subject has no Capability Manager yet (needs admin).",
   );
 
-  // Optionally notify selected capability managers (esp. when no CM is mapped).
+  // Route notifications exactly like the Zoho intake so both paths behave the
+  // same: every CM of the subject's vertical (in-app + email), plus admins as a
+  // safety net when there's no vertical or the vertical has no CMs — so a raise
+  // is never silent.
+  const subjName = info.subjects?.name ?? subject_name;
+  const uniName = info.universities?.name ?? "a university";
+  const raiserLabel = ctx.profile?.full_name || ctx.email;
+
+  if (capability_id) {
+    const notified = await notifyCapabilityManagers(
+      capability_id,
+      {
+        ticketId: ticket.id,
+        title: `🆕 New backup request — ${info.ticket_no}`,
+        body: `${raiserLabel} raised a backup request for ${subjName} at ${uniName}. Absent: ${absent_instructor_name}. Please review and assign a backup.`,
+      },
+      ctx.email,
+    );
+    // B2 — the vertical exists but has no CMs: don't let it sit silently.
+    if (notified === 0) {
+      await notifyOps({
+        ticketId: ticket.id,
+        title: `⚠️ Backup request with no CM — ${info.ticket_no}`,
+        body: `${subjName} at ${uniName} has no Capability Manager. Add one in Directory → Capability Managers so it can be assigned. Absent: ${absent_instructor_name}.`,
+      });
+    }
+  } else {
+    // No vertical → new/unknown subject. Alert Ops/HOD to map it (same as Zoho).
+    await notifyOps({
+      ticketId: ticket.id,
+      title: `⚠️ New subject — needs admin — ${info.ticket_no}`,
+      body: `A ticket for "${subject_name}" at ${uniName} was raised, but that subject isn't mapped to a vertical yet. Add the vertical + a Capability Manager, then it routes automatically. Absent: ${absent_instructor_name}.`,
+    });
+  }
+
+  // Also honour any manually-selected CMs from the "Notify Capability Managers" field.
   if (notifyCmIds.length) {
     const { data: cms } = await supabase.rpc("list_capability_managers");
     const list = (cms ?? []) as { user_id: string; name: string; email: string }[];
@@ -126,7 +162,7 @@ export async function createTicket(_prev: ActionState, formData: FormData): Prom
         recipientEmail: t.email,
         type: "ticket",
         title: `Backup requested — ${info.ticket_no}`,
-        body: `${ctx.profile?.full_name || ctx.email} raised a backup request for ${info.subjects?.name ?? "a subject"} at ${info.universities?.name ?? "a university"}. Absent: ${absent_instructor_name}. Please review.`,
+        body: `${raiserLabel} raised a backup request for ${subjName} at ${uniName}. Absent: ${absent_instructor_name}. Please review.`,
         ticketId: ticket.id,
       });
     }
@@ -176,7 +212,7 @@ export async function transitionTicket(_prev: ActionState, formData: FormData): 
   const supabase = await createAuthedClient();
   const { data: ticket } = await supabase
     .from("tickets")
-    .select("id, status, mode, capability_id, absent_to")
+    .select("id, status, mode, capability_id, absent_to, source, zoho_record_id")
     .eq("id", ticketId)
     .maybeSingle();
   if (!ticket) return { error: "Ticket not found." };
@@ -258,6 +294,33 @@ export async function transitionTicket(_prev: ActionState, formData: FormData): 
 
   await logEvent(supabase, ticketId, ctx.userId, actorName, from, to, note ?? assignNote ?? NEXT[action]?.note);
 
+  // Mirror the lifecycle back to the origin Zoho ticket's status (best-effort;
+  // a clean no-op until Zoho OAuth is configured). Assign → In Progress,
+  // Confirm → Resolved (arranged — online or offline), Cancel → Discard.
+  const zt = ticket as unknown as { source: string | null; zoho_record_id: string | null };
+  if (zt.source === "zoho" && zt.zoho_record_id) {
+    const zStatus =
+      action === "confirm"
+        ? ZOHO_STATUS.resolved
+        : action === "assign"
+          ? ZOHO_STATUS.inProgress
+          : action === "cancel"
+            ? ZOHO_STATUS.discard
+            : null;
+    if (zStatus) {
+      const r = await setZohoStatus(zt.zoho_record_id, zStatus);
+      await logEvent(
+        supabase,
+        ticketId,
+        ctx.userId,
+        "Zoho sync",
+        to,
+        to,
+        r.ok ? `Zoho ticket set to "${zStatus}".` : `Zoho sync failed: ${r.detail}`,
+      );
+    }
+  }
+
   // Fire the right notifications for this step: raiser, the assigned backup,
   // and the Ops/HOD approval queues — so every party is alerted end to end.
   const NOTIFY_ACTIONS = ["assign", "confirm", "to_invoice", "ops_approve", "hod_approve"];
@@ -280,20 +343,6 @@ export async function transitionTicket(_prev: ActionState, formData: FormData): 
     } | null;
     const subj = f?.subjects?.name ?? "the subject";
     const uni = f?.universities?.name ?? "the university";
-
-    // Backup allocated & dispatched → close the origin Zoho ticket (best-effort).
-    if (action === "confirm" && f?.source === "zoho" && f.zoho_record_id) {
-      const r = await closeZohoTicket(f.zoho_record_id);
-      await logEvent(
-        supabase,
-        ticketId,
-        ctx.userId,
-        "Zoho sync",
-        to,
-        to,
-        r.ok ? "Zoho ticket closed (backup allocated)." : `Zoho close failed: ${r.detail}`,
-      );
-    }
 
     // Raiser — on assign / confirm.
     if ((action === "assign" || action === "confirm") && f?.raised_by) {
@@ -378,30 +427,55 @@ export async function assignCapability(_prev: ActionState, formData: FormData): 
   const subjectId = String(formData.get("subject_id") || "");
   let capabilityId = String(formData.get("capability_id") || "");
   const newName = String(formData.get("new_name") || "").trim();
-  const managerUserId = String(formData.get("manager_user_id") || "") || null;
   const managerName = String(formData.get("manager_name") || "").trim() || null;
+  const managerEmail = String(formData.get("manager_email") || "").trim().toLowerCase() || null;
 
   if (!ticketId || !subjectId) return { error: "Missing ticket/subject." };
 
   const supabase = await createAuthedClient();
   let managerNameResolved = managerName;
-  let managerUserResolved = managerUserId;
+  let managerUserResolved: string | null = null;
 
   if (capabilityId === "__new__" || (!capabilityId && newName)) {
-    if (!newName) return { error: "Enter a capability name." };
-    if (managerUserId && !managerName) {
-      const { data: p } = await supabase.from("profiles").select("full_name, email").eq("id", managerUserId).maybeSingle();
-      managerNameResolved = (p as { full_name: string | null; email: string } | null)?.full_name || (p as { email: string } | null)?.email || null;
+    if (!newName) return { error: "Enter a subject vertical name." };
+    // A new vertical must come with its first CM's full details (name + email) so
+    // the CM is immediately notifiable and can sign in — same columns as the
+    // Capability Managers directory.
+    if (!managerName) return { error: "Enter the Capability Manager's name." };
+    if (!managerEmail) return { error: "Enter the Capability Manager's email — they need it for alerts and to sign in." };
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(managerEmail)) return { error: "Enter a valid email address." };
+    // Guard against case-variant duplicate verticals (capabilities.name unique is
+    // case-sensitive, so "gen ai" would slip past "Gen AI").
+    const { data: dupe } = await supabase.from("capabilities").select("id, name").ilike("name", newName).limit(1);
+    if ((dupe as { name: string }[] | null)?.[0]) {
+      return { error: `A subject vertical named "${(dupe as { name: string }[])[0].name}" already exists — pick it from the list instead.` };
     }
+    // Create the subject vertical (capability).
     const { data: cap, error: cErr } = await supabase
       .from("capabilities")
-      .insert({ name: newName, manager_user_id: managerUserResolved, manager_name: managerNameResolved, status: "active" })
-      .select("id, manager_user_id, manager_name")
+      .insert({ name: newName, status: "active" })
+      .select("id")
       .single();
-    if (cErr) return { error: cErr.message };
+    if (cErr) return { error: /duplicate|unique/i.test(cErr.message) ? "That subject vertical already exists." : cErr.message };
     capabilityId = cap.id;
-    managerUserResolved = cap.manager_user_id;
-    managerNameResolved = cap.manager_name;
+    // Link an existing login by email if one exists, then create the CM row. The
+    // sync_capability_lead trigger keeps capabilities.manager_* pointed at it.
+    const { data: prof } = await supabase.from("profiles").select("id, full_name").ilike("email", managerEmail).maybeSingle();
+    managerUserResolved = (prof as { id: string } | null)?.id ?? null;
+    managerNameResolved = managerName || (prof as { full_name: string | null } | null)?.full_name || managerEmail;
+    const { error: cmErr } = await supabase.from("capability_managers").insert({
+      capability_id: capabilityId,
+      name: managerNameResolved,
+      email: managerEmail,
+      user_id: managerUserResolved,
+      status: "active",
+    });
+    if (cmErr) return { error: /duplicate|unique/i.test(cmErr.message) ? "A CM with that email already exists for this vertical." : cmErr.message };
+    // If this CM already has a login, grant them the CM role now (otherwise they'd
+    // have to re-login or hit "Re-check my access" before they could act).
+    if (managerUserResolved) {
+      await supabase.rpc("provision_user_access", { p_user: managerUserResolved, p_email: managerEmail });
+    }
   } else {
     if (!capabilityId) return { error: "Pick a capability." };
     const { data: cap } = await supabase.from("capabilities").select("manager_user_id, manager_name").eq("id", capabilityId).maybeSingle();
@@ -409,11 +483,19 @@ export async function assignCapability(_prev: ActionState, formData: FormData): 
     managerNameResolved = (cap as { manager_name: string | null } | null)?.manager_name ?? null;
   }
 
-  // Persist mapping (future tickets for this subject route automatically) + route this ticket.
-  await supabase.from("subjects").update({ capability_id: capabilityId }).eq("id", subjectId);
+  // Persist mapping (future tickets for this subject route automatically) + route
+  // this ticket. If the ticket had no subject (e.g. an "Other" ticket), mirror the
+  // chosen vertical as its subject so it displays cleanly.
+  let finalSubjectId: string | null = subjectId || null;
+  if (finalSubjectId) {
+    await supabase.from("subjects").update({ capability_id: capabilityId }).eq("id", finalSubjectId);
+  } else {
+    const { data: capRow } = await supabase.from("capabilities").select("name").eq("id", capabilityId).maybeSingle();
+    finalSubjectId = await ensureSubject(createAdminClient(), (capRow as { name: string } | null)?.name ?? "Subject", capabilityId);
+  }
   const { error: tErr } = await supabase
     .from("tickets")
-    .update({ capability_id: capabilityId, assigned_cm: managerUserResolved, updated_at: new Date().toISOString() })
+    .update({ subject_id: finalSubjectId, capability_id: capabilityId, assigned_cm: managerUserResolved, updated_at: new Date().toISOString() })
     .eq("id", ticketId);
   if (tErr) return { error: tErr.message };
 
@@ -463,19 +545,17 @@ export async function assignCapability(_prev: ActionState, formData: FormData): 
     universities: { name: string } | null;
     subjects: { name: string } | null;
   } | null;
-  await notifyCapabilityManagers(capabilityId, {
+  const notifiedCms = await notifyCapabilityManagers(capabilityId, {
     ticketId,
     title: `🎯 New ticket in your capability — ${ti?.ticket_no ?? ""}`.trim(),
     body: `A backup request for ${ti?.subjects?.name ?? "a subject"} at ${ti?.universities?.name ?? "a university"} was routed to your capability. Please review and assign a backup.`,
   });
-  // Fallback: if the capability has no CMs on the list yet, at least ping the lead.
-  if (managerUserResolved) {
-    await notify(supabase, {
-      recipientUserId: managerUserResolved,
-      type: "ticket",
-      title: "New ticket in your capability",
-      body: "A backup request was routed to your capability. Please review and assign a backup.",
+  // If the vertical still has no CM with an email, don't go silent — alert Ops.
+  if (notifiedCms === 0) {
+    await notifyOps({
       ticketId,
+      title: `⚠️ Routed to a vertical with no CM — ${ti?.ticket_no ?? ""}`.trim(),
+      body: `${ti?.subjects?.name ?? "A subject"} at ${ti?.universities?.name ?? "a university"} was routed to a vertical that has no Capability Manager. Add one in Directory → Capability Managers.`,
     });
   }
 

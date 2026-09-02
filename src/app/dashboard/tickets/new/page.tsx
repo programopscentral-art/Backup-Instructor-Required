@@ -47,32 +47,23 @@ export default async function NewTicketPage() {
   const supabase = await createAuthedClient();
   const [
     { data: universities },
-    { data: subjects },
+    { data: caps },
     { data: instructors },
     { data: reasons },
     { data: cms },
   ] = await Promise.all([
     supabase.from("universities").select("id, name").order("name"),
-    supabase
-      .from("subjects")
-      .select("id, name, capability_id, capabilities(name, manager_name)")
-      .order("name"),
+    // The "Subject" is the subject VERTICAL (capability) — the single routing key
+    // shared with Zoho. Each carries its lead CM for the routing hint.
+    supabase.from("capabilities").select("id, name, manager_name").eq("status", "active").order("name"),
     supabase.from("instructors").select("id, instructor_name, emp_id, university_id").order("instructor_name"),
     supabase.from("ticket_reasons").select("id, label").order("label"),
     supabase.rpc("list_capability_managers"),
   ]);
 
-  const subjectOptions = ((subjects ?? []) as unknown as Array<{
-    id: string;
-    name: string;
-    capability_id: string | null;
-    capabilities: { name: string; manager_name: string | null } | null;
-  }>).map<SubjectOption>((s) => ({
-    id: s.id,
-    name: s.name,
-    capability: s.capabilities?.name ?? null,
-    manager: s.capabilities?.manager_name ?? null,
-  }));
+  const subjectOptions = ((caps ?? []) as Array<{ id: string; name: string; manager_name: string | null }>).map<SubjectOption>(
+    (c) => ({ id: c.id, name: c.name, capability: c.name, manager: c.manager_name }),
+  );
 
   return (
     <div>

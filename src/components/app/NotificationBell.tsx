@@ -62,10 +62,17 @@ export function NotificationBell() {
       } = await supabase.auth.getUser();
       if (!user || !active) return;
 
+      // Match by account OR by email — the latter surfaces notifications that were
+      // addressed to this person before they had an account (recipient_user_id was
+      // null at send time). RLS permits the same two matches.
+      const email = (user.email ?? "").toLowerCase();
+      const orFilter = email
+        ? `recipient_user_id.eq.${user.id},recipient_email.ilike.${email}`
+        : `recipient_user_id.eq.${user.id}`;
       const { data } = await supabase
         .from("notifications")
         .select("id, title, body, ticket_id, read, created_at")
-        .eq("recipient_user_id", user.id)
+        .or(orFilter)
         .order("created_at", { ascending: false })
         .limit(30);
       if (!active) return;

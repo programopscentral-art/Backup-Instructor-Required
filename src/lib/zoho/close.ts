@@ -1,6 +1,12 @@
-// Product → Zoho: mark the origin Creator record "Closed" once a backup is
-// allocated/dispatched. Best-effort — never throws into the caller, and no-ops
-// cleanly until the OAuth env vars are configured (see ZOHO_ARCHITECTURE.md).
+// Product → Zoho: mirror the ticket's lifecycle back onto the origin Creator
+// record's "Ticket Status" field. Best-effort — never throws into the caller,
+// and no-ops cleanly until the OAuth env vars are configured (see
+// ZOHO_ARCHITECTURE.md).
+//
+// Ticket_Status choices (radio): Yet To Pick · In Progress · Resolved · Re-open · Discard
+//   assign  → In Progress   (a backup is being lined up)
+//   confirm → Resolved      (arranged & dispatched — closed, online or offline)
+//   cancel  → Discard       (request dropped)
 
 interface ZohoEnv {
   clientId: string;
@@ -12,8 +18,15 @@ interface ZohoEnv {
   app: string;
   report: string;
   statusField: string;
-  closedValue: string;
 }
+
+/** The Ticket_Status values we write, overridable by env if the form ever renames them. */
+export const ZOHO_STATUS = {
+  inProgress: process.env.ZOHO_STATUS_INPROGRESS || "In Progress",
+  resolved: process.env.ZOHO_STATUS_RESOLVED || "Resolved",
+  discard: process.env.ZOHO_STATUS_DISCARD || "Discard",
+  reopen: process.env.ZOHO_STATUS_REOPEN || "Re-open",
+};
 
 function zohoEnv(): ZohoEnv | null {
   const clientId = process.env.ZOHO_OAUTH_CLIENT_ID;
@@ -28,9 +41,10 @@ function zohoEnv(): ZohoEnv | null {
     apiDomain: process.env.ZOHO_API_DOMAIN || "https://www.zohoapis.in",
     owner: process.env.ZOHO_APP_OWNER || "nxtwave",
     app: process.env.ZOHO_APP_NAME || "niat",
+    // The records live in the "All_Campus_Program_Operations_Tracker" report
+    // (verified via the Creator API). Override with ZOHO_REPORT_NAME if it changes.
     report: process.env.ZOHO_REPORT_NAME || "All_Campus_Program_Operations_Tracker",
     statusField: process.env.ZOHO_STATUS_FIELD || "Ticket_Status",
-    closedValue: process.env.ZOHO_STATUS_CLOSED_VALUE || "Closed",
   };
 }
 
@@ -46,11 +60,12 @@ async function accessToken(env: ZohoEnv): Promise<string | null> {
 }
 
 /**
- * Set the Zoho Creator record's status field to the "Closed" value.
+ * Set the Zoho Creator record's Ticket_Status field to `statusValue`.
  * Returns a small result object; callers should not block on failure.
  */
-export async function closeZohoTicket(
+export async function setZohoStatus(
   zohoRecordId: string | null | undefined,
+  statusValue: string,
 ): Promise<{ ok: boolean; detail: string }> {
   const env = zohoEnv();
   if (!env) return { ok: false, detail: "zoho oauth not configured" };
@@ -65,7 +80,7 @@ export async function closeZohoTicket(
         Authorization: `Zoho-oauthtoken ${token}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ data: { [env.statusField]: env.closedValue } }),
+      body: JSON.stringify({ data: { [env.statusField]: statusValue } }),
     });
     const json = (await res.json().catch(() => ({}))) as { code?: number; message?: string };
     // Creator returns code 3000 on a successful update.

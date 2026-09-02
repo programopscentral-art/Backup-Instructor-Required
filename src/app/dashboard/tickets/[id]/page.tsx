@@ -46,7 +46,7 @@ export default async function TicketDetailPage({
           .select("id, instructor_name, emp_id, email, availability_mode, current_status")
           .eq("capability_id", ticket.capability_id)
       : Promise.resolve({ data: [] as never[] }),
-    supabase.from("capabilities").select("id, name, manager_name").order("name"),
+    supabase.from("capabilities").select("id, name, manager_name").eq("status", "active").order("name"),
     supabase.rpc("list_capability_managers"),
     supabase.from("universities").select("id, name").eq("status", "active").order("name"),
     supabase.from("subjects").select("id, name").eq("status", "active").order("name"),

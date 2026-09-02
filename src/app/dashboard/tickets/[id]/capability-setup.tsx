@@ -10,34 +10,34 @@ interface Cap {
   name: string;
   manager_name: string | null;
 }
-interface Cm {
-  user_id: string;
-  name: string;
-  email: string;
-  capability: string | null;
-}
 
 const NEW = "__new__";
 
+/**
+ * Resolve a "needs admin" ticket: pick the subject VERTICAL (capability) it
+ * belongs to — or add a brand-new vertical + its first Capability Manager
+ * (name + email, so the CM is notifiable and can sign in). Once linked, the
+ * subject routes automatically forever after.
+ */
 export function CapabilitySetup({
   ticketId,
   subjectId,
   capabilities,
-  cmUsers,
 }: {
   ticketId: string;
   subjectId: string;
   capabilities: Cap[];
-  cmUsers: Cm[];
+  cmUsers?: unknown; // (legacy prop — no longer used)
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(assignCapability, {});
   const router = useRouter();
   const [choice, setChoice] = useState("");
-  const [managerMode, setManagerMode] = useState<"user" | "text">("user");
 
   useEffect(() => {
     if (state.ok) router.refresh();
   }, [state.ok, router]);
+
+  const isNew = choice === NEW;
 
   return (
     <form action={action} className="space-y-4">
@@ -46,57 +46,51 @@ export function CapabilitySetup({
 
       <div className="flex items-start gap-2 rounded-xl border border-[#f6cdd6] bg-[#fdeef1] px-3 py-2.5 text-sm text-[color:var(--rose)]">
         <AlertTriangle size={16} className="mt-0.5 flex-none" />
-        <span>This subject has no Capability Manager. Assign one first, then add backups and assign.</span>
+        <span>This subject isn&apos;t mapped to a subject vertical yet. Pick the vertical it belongs to, or add a new one — then it routes to that vertical&apos;s Capability Managers.</span>
       </div>
 
       <div>
         <label className="label flex items-center gap-1.5">
-          <UserCog size={14} /> Capability &amp; Manager
+          <UserCog size={14} /> Subject vertical
         </label>
+        {/* Verticals by NAME only — a vertical can have several CMs, so naming one
+            here would be misleading. */}
         <select name="capability_id" value={choice} onChange={(e) => setChoice(e.target.value)} required className="select">
           <option value="" disabled>
-            Select a capability…
+            Select a subject vertical…
           </option>
           {capabilities.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
-              {c.manager_name ? ` · CM ${c.manager_name}` : " · (no manager)"}
             </option>
           ))}
-          <option value={NEW}>+ Create new capability…</option>
+          <option value={NEW}>+ Add a new subject vertical…</option>
         </select>
       </div>
 
-      {choice === NEW && (
+      {isNew && (
         <div className="space-y-3 rounded-xl border border-[color:var(--line)] bg-[color:var(--cream)] p-3">
           <div>
-            <label className="label">New capability name</label>
-            <input name="new_name" placeholder="e.g. Operating Systems & OS Principles" className="input" />
+            <label className="label">
+              New subject vertical name <span className="text-[color:var(--rose)]">*</span>
+            </label>
+            <input name="new_name" placeholder="e.g. Gen AI" className="input" autoFocus />
           </div>
           <div>
-            <label className="label">Manager</label>
-            <div className="mb-2 flex gap-2 text-xs">
-              <button type="button" onClick={() => setManagerMode("user")} className={`rounded-full px-3 py-1 font-semibold ${managerMode === "user" ? "bg-[color:var(--accent-soft)] text-[color:var(--accent)]" : "text-[color:var(--muted)]"}`}>
-                Pick a manager
-              </button>
-              <button type="button" onClick={() => setManagerMode("text")} className={`rounded-full px-3 py-1 font-semibold ${managerMode === "text" ? "bg-[color:var(--accent-soft)] text-[color:var(--accent)]" : "text-[color:var(--muted)]"}`}>
-                Type a name
-              </button>
-            </div>
-            {managerMode === "user" ? (
-              <select name="manager_user_id" className="select">
-                <option value="">— select a capability manager —</option>
-                {cmUsers.map((m) => (
-                  <option key={m.user_id} value={m.user_id}>
-                    {m.name || m.email}
-                    {m.capability ? ` · ${m.capability}` : ""}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input name="manager_name" placeholder="Manager full name" className="input" />
-            )}
+            <label className="label">
+              Capability Manager name <span className="text-[color:var(--rose)]">*</span>
+            </label>
+            <input name="manager_name" placeholder="Full name" className="input" />
           </div>
+          <div>
+            <label className="label">
+              Capability Manager email <span className="text-[color:var(--rose)]">*</span>
+            </label>
+            <input name="manager_email" type="email" placeholder="name@nxtwave.co.in" className="input" />
+          </div>
+          <p className="text-xs text-[color:var(--faint)]">
+            Creates the vertical and its first CM — the email lets them get alerts, sign in, and manage backups. Add more CMs any time in Directory → Capability Managers.
+          </p>
         </div>
       )}
 
@@ -105,7 +99,7 @@ export function CapabilitySetup({
       )}
 
       <button type="submit" disabled={pending} className="btn btn-primary w-full">
-        {pending ? "Assigning…" : "Assign Capability Manager"}
+        {pending ? "Saving…" : isNew ? "Create vertical & assign" : "Assign to vertical"}
       </button>
     </form>
   );
