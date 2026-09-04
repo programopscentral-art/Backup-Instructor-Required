@@ -110,7 +110,7 @@ export function Footer({ roles = [], team }: { roles?: AppRole[]; team?: string 
           {/* bottom bar */}
           <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-white/15 pt-6 sm:flex-row">
             <p className="text-xs text-white/60">
-              © {year} NIAT · NxtWave Institute of Advanced Technologies. All rights reserved.
+              © {year} NIAT · NxtWave of Innovation in Advanced Technologies. All rights reserved.
             </p>
             <div className="flex items-center gap-4 text-xs text-white/70">
               <span className="inline-flex items-center gap-1.5">

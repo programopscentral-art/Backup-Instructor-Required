@@ -14,7 +14,7 @@
 ---
 
 ## 1. What this is
-An internal ops platform for **NIAT (NxtWave Institute of Advanced Technologies)** across 40+ universities. When a university instructor is suddenly absent (or assigned other work), a **backup instructor** must be arranged (online/offline, decided by Program Ops), delivered, and — if offline — expensed within 24h and approved Ops → HOD. Universities **raise tickets in Zoho Creator**; the ticket flows (read-only) into this app instantly and is worked through here.
+An internal ops platform for **NIAT (NxtWave of Innovation in Advanced Technologies)** across 40+ universities. When a university instructor is suddenly absent (or assigned other work), a **backup instructor** must be arranged (online/offline, decided by Program Ops), delivered, and — if offline — expensed within 24h and approved Ops → HOD. Universities **raise tickets in Zoho Creator**; the ticket flows (read-only) into this app instantly and is worked through here.
 
 ## 2. Live coordinates
 - **Production (Vercel):** https://backup-instructor-required.vercel.app  (Vercel team `Central-Team1`, Hobby plan, functions pinned to **Mumbai `bom1`** via `vercel.json`). Push to `main` → auto-deploys.

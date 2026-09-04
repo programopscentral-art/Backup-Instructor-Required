@@ -1,0 +1,789 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Backup OS — User Handbook</title>
+<style>
+  :root{
+    --maroon:#7c1d2e; --maroon-2:#9b2436; --orange:#c1440e; --ink:#1c1917;
+    --muted:#57534e; --faint:#8a8580; --line:#e7e2dc; --line-2:#efeae4;
+    --cream:#faf7f3; --cream-2:#f3ede6; --good:#177245; --rose:#b4232f;
+    --blue:#2b5c8a;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-print-color-adjust:exact; print-color-adjust:exact;}
+  body{
+    font-family:"Segoe UI",-apple-system,Roboto,Helvetica,Arial,sans-serif;
+    color:var(--ink); font-size:11pt; line-height:1.55; margin:0;
+    background:#fff;
+  }
+  h1,h2,h3,h4{font-family:"Segoe UI Semibold","Segoe UI",Arial,sans-serif; line-height:1.2; color:var(--maroon); margin:0 0 .4em;}
+  h2.section{font-size:20pt; color:var(--maroon); border-bottom:3px solid var(--orange); padding-bottom:.15em; margin-top:0;}
+  h3{font-size:13.5pt; color:var(--ink); margin-top:1.3em;}
+  h4{font-size:11.5pt; color:var(--maroon-2); margin-top:1.1em; text-transform:none;}
+  p{margin:.5em 0;}
+  a{color:var(--blue); text-decoration:none;}
+  strong{color:var(--ink);}
+  code{background:var(--cream-2); border:1px solid var(--line); border-radius:4px; padding:.05em .35em; font-family:"Cascadia Mono",Consolas,monospace; font-size:9.5pt;}
+  ul,ol{margin:.4em 0 .7em; padding-left:1.3em;}
+  li{margin:.28em 0;}
+  .eyebrow{font-size:8.5pt; letter-spacing:.14em; text-transform:uppercase; color:var(--orange); font-weight:700;}
+
+  /* ---- page control ---- */
+  @page{ size:A4; margin:16mm 15mm; }
+  .section-wrap{ page-break-before:always; }
+  .avoid{ break-inside:avoid; page-break-inside:avoid; }
+
+  /* ---- cover ---- */
+  .cover{
+    page-break-after:always; height:262mm; display:flex; flex-direction:column;
+    justify-content:space-between; text-align:left;
+    background:linear-gradient(150deg,#5f1421 0%,#7c1d2e 46%,#9b2436 100%);
+    color:#fff; margin:-16mm -15mm; padding:26mm 22mm; position:relative; overflow:hidden;
+  }
+  .cover .ghost{ position:absolute; right:-14mm; bottom:-24mm; font-size:150pt; font-weight:800; color:rgba(255,255,255,.06); letter-spacing:-.04em; }
+  .cover .brandline{ font-size:9pt; letter-spacing:.24em; text-transform:uppercase; color:#f2cfa6; font-weight:700;}
+  .cover h1{ color:#fff; font-size:52pt; letter-spacing:-.02em; margin:.1em 0 0;}
+  .cover h1 .os{ color:#f0a06a;}
+  .cover .tag{ font-size:15pt; color:#f6e7d8; max-width:150mm; margin-top:6mm; line-height:1.4;}
+  .cover .sub{ font-size:11pt; color:#e9c9b3; margin-top:3mm;}
+  .cover .foot{ font-size:10pt; color:#f0d6c2; position:relative; z-index:2;}
+  .cover .chips{ margin-top:8mm; display:flex; gap:8px; flex-wrap:wrap;}
+  .cover .chip{ background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.25); border-radius:999px; padding:5px 13px; font-size:9.5pt; color:#fff;}
+
+  /* ---- toc ---- */
+  .toc{ columns:2; column-gap:14mm; font-size:10.5pt;}
+  .toc li{ margin:.2em 0; break-inside:avoid;}
+  .toc .g{ font-weight:700; color:var(--maroon); list-style:none; margin-left:-1.1em; margin-top:.6em;}
+
+  /* ---- callouts ---- */
+  .box{ border:1px solid var(--line); border-left:5px solid var(--orange); background:var(--cream); border-radius:8px; padding:10px 14px; margin:.8em 0; }
+  .box.good{ border-left-color:var(--good); }
+  .box.warn{ border-left-color:var(--rose); background:#fdf3f2;}
+  .box.info{ border-left-color:var(--blue); }
+  .box .t{ font-weight:700; color:var(--ink); display:block; margin-bottom:.15em; font-size:10.5pt;}
+  .box.warn .t{ color:var(--rose);}
+  .box.good .t{ color:var(--good);}
+  .box.info .t{ color:var(--blue);}
+
+  .example{ border:1px dashed var(--maroon-2); background:#fbf6f2; border-radius:8px; padding:10px 14px; margin:.8em 0;}
+  .example .t{ font-weight:700; color:var(--maroon); font-size:9pt; letter-spacing:.08em; text-transform:uppercase;}
+
+  /* ---- tables ---- */
+  table{ border-collapse:collapse; width:100%; font-size:10pt; margin:.7em 0; }
+  th,td{ border:1px solid var(--line); padding:6px 9px; text-align:left; vertical-align:top;}
+  th{ background:var(--cream-2); color:var(--maroon); font-weight:700;}
+  tr{ break-inside:avoid; }
+
+  /* ---- figures ---- */
+  figure.shot{ margin:1em 0; break-inside:avoid; text-align:center;}
+  figure.shot img{ max-width:100%; border:1px solid var(--line); border-radius:8px; box-shadow:0 1px 4px rgba(0,0,0,.08);}
+  figure.shot figcaption{ font-size:9pt; color:var(--faint); margin-top:5px; font-style:italic;}
+  .placeholder{ border:2px dashed var(--maroon-2); border-radius:8px; background:repeating-linear-gradient(45deg,#faf3ee,#faf3ee 12px,#f4e7de 12px,#f4e7de 24px); color:var(--maroon); padding:26px 14px; font-size:10pt; text-align:center;}
+  .placeholder b{ display:block; font-size:11pt; margin-bottom:3px;}
+
+  /* ---- lifecycle strip ---- */
+  .flow{ display:flex; flex-wrap:wrap; gap:5px; align-items:stretch; margin:1em 0; }
+  .flow .st{ flex:1 1 0; min-width:58px; background:var(--cream); border:1px solid var(--line); border-top:3px solid var(--maroon); border-radius:6px; padding:7px 5px; text-align:center; font-size:8.4pt; font-weight:600; color:var(--ink); position:relative;}
+  .flow .st .n{ display:block; font-size:7pt; color:var(--orange); font-weight:700;}
+  .flow .st.off{ border-top-color:var(--orange);}
+  .flow .st.end{ border-top-color:var(--good);}
+
+  .steps{ counter-reset:s; list-style:none; padding-left:0;}
+  .steps>li{ counter-increment:s; position:relative; padding-left:30px; margin:.55em 0;}
+  .steps>li::before{ content:counter(s); position:absolute; left:0; top:0; width:21px; height:21px; background:var(--maroon); color:#fff; border-radius:50%; font-size:9.5pt; font-weight:700; display:flex; align-items:center; justify-content:center;}
+
+  .role-grid td:first-child{ font-weight:700; color:var(--maroon); white-space:nowrap;}
+  .pill{ display:inline-block; border-radius:999px; padding:1px 8px; font-size:8.5pt; font-weight:700; border:1px solid var(--line);}
+  .pill.g{ background:#eaf6ee; color:var(--good); border-color:#bfe3cb;}
+  .pill.o{ background:#fdeee4; color:var(--orange); border-color:#f5cdb0;}
+  .pill.r{ background:#fdeaea; color:var(--rose); border-color:#f3c4c4;}
+  .lead{ font-size:12pt; color:var(--muted); }
+  .kicker{ color:var(--faint); font-size:9.5pt; margin-top:-.3em;}
+  hr{ border:none; border-top:1px solid var(--line); margin:1.2em 0;}
+  .small{ font-size:9pt; color:var(--faint);}
+</style>
+</head>
+<body>
+
+<!-- ============ COVER ============ -->
+<section class="cover">
+  <div>
+    <div class="brandline">NIAT · NxtWave of Innovation in Advanced Technologies</div>
+    <h1>Backup <span class="os">OS</span></h1>
+    <div class="tag">The complete guide to arranging, delivering and settling backup instructors across 40+ universities — one accountable flow.</div>
+    <div class="chips">
+      <span class="chip">For every role</span>
+      <span class="chip">Step by step</span>
+      <span class="chip">Plain English</span>
+      <span class="chip">Routing maps</span>
+    </div>
+  </div>
+  <div class="foot">
+    <strong>User Handbook</strong> &nbsp;·&nbsp; Version 1.0 &nbsp;·&nbsp; August 2026<br>
+    Live at backup-instructor-required.vercel.app
+  </div>
+  <div class="ghost">OS</div>
+</section>
+
+<!-- ============ INTRO / TOC ============ -->
+<section>
+  <div class="eyebrow">Start here</div>
+  <h2 class="section">About this handbook</h2>
+  <p class="lead">This is the one document to read if you want to understand and use <strong>Backup OS</strong>. It explains what the product is, who uses it, and exactly how to do each job — from a university reporting an absent instructor, all the way to the final payment approval.</p>
+  <p>Everything is written in simple English with real examples, flow diagrams and routing maps. You do not need any technical background. If you only care about your own job, jump to your role in the table below and read that part.</p>
+
+  <div class="box info avoid">
+    <span class="t">How to read this</span>
+    Each section is short. <strong>Blue boxes</strong> give tips, <strong>red boxes</strong> are warnings, and <strong>dashed boxes</strong> are worked examples. Words in <code>this style</code> are things you see on the screen.
+  </div>
+
+  <h3>What's inside</h3>
+  <ol class="toc">
+    <li class="g">Understand the product</li>
+    <li>1 · What Backup OS is (and the problem it solves)</li>
+    <li>2 · The words we use (glossary)</li>
+    <li>3 · Who uses it — roles &amp; access</li>
+    <li>4 · The big picture — a ticket's life</li>
+    <li class="g">Do the work</li>
+    <li>5 · Signing in</li>
+    <li>6 · The Dashboard</li>
+    <li>7 · Raising an absence ticket</li>
+    <li>8 · Assigning a backup &amp; picking the mode</li>
+    <li>9 · Confirm &amp; dispatch</li>
+    <li>10 · The session &amp; the invoice (offline)</li>
+    <li>11 · Approvals — Ops then HOD</li>
+    <li class="g">Every screen</li>
+    <li>12 · My Assignments (backup instructor)</li>
+    <li>13 · Invoices</li>
+    <li>14 · HOD Approvals</li>
+    <li>15 · Analytics</li>
+    <li>16 · Directories</li>
+    <li>17 · Capability Managers &amp; new subjects</li>
+    <li>18 · Notifications (app, email, Teams)</li>
+    <li>19 · Logs &amp; history</li>
+    <li>20 · Access &amp; Roles (admin)</li>
+    <li class="g">Good to know</li>
+    <li>21 · Where tickets come from (Zoho)</li>
+    <li>22 · Flags &amp; special cases</li>
+    <li>23 · What each role does (cheat-sheet)</li>
+    <li>24 · Frequently asked questions</li>
+    <li>25 · Page &amp; routing map (appendix)</li>
+  </ol>
+</section>
+
+<!-- ============ 1. WHAT IS IT ============ -->
+<section class="section-wrap">
+  <div class="eyebrow">Understand the product · 1</div>
+  <h2 class="section">1 · What Backup OS is</h2>
+
+  <h3>The problem</h3>
+  <p>NIAT runs classes at <strong>40+ partner universities</strong>. Sometimes an instructor is suddenly <strong>absent</strong> — they fall sick, or they get pulled onto other work. When that happens, a class must not be left without a teacher. Someone has to quickly arrange a <strong>backup instructor</strong>, decide whether they teach <strong>online or offline (on campus)</strong>, make sure the session actually happens, and — if the backup travelled to a campus — settle their expenses within a day and get it approved.</p>
+  <p>Doing all of this over calls, chats and spreadsheets is slow and easy to lose track of. Nobody has one clear view of "which absences are open, who is covering them, and which payments are pending."</p>
+
+  <h3>The solution</h3>
+  <p><strong>Backup OS</strong> is NIAT's internal web platform that runs this whole process in one place, with full accountability. It is part of NIAT's "OS" family of tools (alongside Campus OS and Teach OS).</p>
+  <ul>
+    <li>A university reports an absence — it becomes a <strong>ticket</strong>.</li>
+    <li>The ticket automatically reaches the right people (Program Ops and the subject's Capability Manager).</li>
+    <li>A <strong>backup instructor</strong> is chosen and the <strong>mode</strong> (online/offline) is set.</li>
+    <li>The session is delivered.</li>
+    <li>If it was offline, the backup files a <strong>claim (invoice)</strong> which is approved by Ops and then the HOD.</li>
+    <li>Every step is recorded, and the right people are notified by in-app alert, email, and Microsoft Teams.</li>
+  </ul>
+
+  <div class="box good avoid">
+    <span class="t">In one line</span>
+    Backup OS turns "an instructor is absent" into a tracked, accountable flow that ends in "the class was covered and everyone was paid and approved."
+  </div>
+
+  <h3>What it looks like</h3>
+  
+</section>
+
+<!-- ============ 2. GLOSSARY ============ -->
+<section class="section-wrap">
+  <div class="eyebrow">Understand the product · 2</div>
+  <h2 class="section">2 · The words we use</h2>
+  <p>These few words appear everywhere in Backup OS. Learn them once and the rest is easy.</p>
+  <table>
+    <tr><th>Word</th><th>What it means</th></tr>
+    <tr><td><strong>Ticket</strong></td><td>One reported absence that needs a backup. Every ticket has a number like <code>BIT-0031</code> and moves through stages until it is closed.</td></tr>
+    <tr><td><strong>Program Ops / Admin</strong></td><td>The central operations team that runs the whole thing. They can see and do everything.</td></tr>
+    <tr><td><strong>HOD</strong></td><td>Head of Department. Gives the <em>final</em> approval on money (offline claims), after Ops.</td></tr>
+    <tr><td><strong>Capability</strong> (subject vertical)</td><td>A family of subjects, e.g. <em>Frontend Technologies</em>, <em>Backend Systems</em>, <em>Data Structures &amp; Algorithms</em>. Every subject belongs to one capability.</td></tr>
+    <tr><td><strong>Capability Manager (CM)</strong></td><td>The person who owns a capability. When a ticket for their subject arrives, they help choose the backup. A capability can have several CMs.</td></tr>
+    <tr><td><strong>Backup instructor</strong></td><td>The person who covers the absent class. Chosen from the <em>Backup Pool</em>.</td></tr>
+    <tr><td><strong>Backup Pool</strong></td><td>The ready list of candidate backups under each capability.</td></tr>
+    <tr><td><strong>Mode</strong></td><td>How the backup teaches: <strong>Online</strong> or <strong>Offline</strong> (on campus). Program Ops decides this.</td></tr>
+    <tr><td><strong>Invoice / Claim</strong></td><td>For offline sessions only — the backup's expenses (travel, stay, other), filed with a NxtClaim link and charge slips.</td></tr>
+    <tr><td><strong>SLA</strong></td><td>A time limit. Here it means the offline claim must be filed within <strong>24 hours</strong>.</td></tr>
+    <tr><td><strong>Red flag</strong></td><td>A warning mark when the 24-hour claim window is missed.</td></tr>
+    <tr><td><strong>University Staff</strong></td><td>A person at a campus who reports absences for that campus.</td></tr>
+    <tr><td><strong>Zoho</strong></td><td>The form system universities already use. Tickets can arrive from there automatically.</td></tr>
+  </table>
+</section>
+
+<!-- ============ 3. ROLES ============ -->
+<section class="section-wrap">
+  <div class="eyebrow">Understand the product · 3</div>
+  <h2 class="section">3 · Who uses it — roles &amp; access</h2>
+  <p>Backup OS shows each person only what their <strong>role</strong> allows. The screen even changes colour per role. Here are the roles:</p>
+  <table class="role-grid">
+    <tr><th>Role</th><th>What they can do</th></tr>
+    <tr><td>Admin — Program Ops</td><td>Full control. Raise tickets, assign backups, set mode, confirm, approve claims, manage directories and access. The central driver.</td></tr>
+    <tr><td>HOD</td><td>Everything Ops can see, plus the <strong>final</strong> sign-off on offline claims.</td></tr>
+    <tr><td>Capability Manager (CM)</td><td>Owns one or more subject verticals. Helps assign backups for their subjects and manages their backup pool. Sees their own vertical's work.</td></tr>
+    <tr><td>Capability Manager Assistant (CMA)</td><td>Helps the CM within the same vertical.</td></tr>
+    <tr><td>University Staff</td><td>Reports absences for their own campus and manages that campus's staff and instructors. Sees only their campus.</td></tr>
+    <tr><td>Instructor / Backup</td><td>Sees the sessions they are assigned to cover (in <em>My Assignments</em>) and uploads their invoice. Cannot raise tickets.</td></tr>
+  </table>
+
+  <h3>How access is decided</h3>
+  <p>Access = <strong>role × scope</strong>. Scope is how wide you can see: <em>Global</em> (everything), <em>University</em> (one campus), or <em>Capability</em> (one subject vertical).</p>
+
+  <div class="box info avoid">
+    <span class="t">One person, one role</span>
+    Everyone holds exactly one role at a time. To change someone's role, the admin removes the old one and grants the new one — this keeps duties separated (for example, the same person can never both file and approve a claim).
+  </div>
+
+  <div class="box good avoid">
+    <span class="t">Auto sign-in by email</span>
+    If your email is already listed on a directory (as staff, CM, or a backup in the pool), you get the right role automatically the first time you sign in with Google. No waiting for a manual grant.
+  </div>
+</section>
+
+<!-- ============ 4. BIG PICTURE ============ -->
+<section class="section-wrap">
+  <div class="eyebrow">Understand the product · 4</div>
+  <h2 class="section">4 · The big picture — a ticket's life</h2>
+  <p>Every absence follows the same path. Here it is, start to finish:</p>
+
+  <div class="flow avoid">
+    <div class="st"><span class="n">1</span>Raised</div>
+    <div class="st"><span class="n">2</span>CM Review</div>
+    <div class="st"><span class="n">3</span>Mode set</div>
+    <div class="st"><span class="n">4</span>Backup Assigned</div>
+    <div class="st"><span class="n">5</span>Confirmed &amp; Dispatched</div>
+    <div class="st"><span class="n">6</span>Session Done</div>
+    <div class="st off"><span class="n">7</span>Invoice (offline)</div>
+    <div class="st off"><span class="n">8</span>Ops Approved</div>
+    <div class="st end"><span class="n">9</span>HOD Approved</div>
+    <div class="st end"><span class="n">10</span>Closed</div>
+  </div>
+
+  <p>In plain words:</p>
+  <ol class="steps">
+    <li><strong>Raised</strong> — a university staff member (or Ops) reports the absence. It instantly reaches Program Ops and the subject's Capability Manager.</li>
+    <li><strong>CM review</strong> — the CM (or Ops) looks at who is free and picks a backup.</li>
+    <li><strong>Mode set</strong> — Program Ops decides online or offline (on campus).</li>
+    <li><strong>Backup assigned</strong> — the chosen backup is attached to the ticket and notified.</li>
+    <li><strong>Confirmed &amp; dispatched</strong> — Ops confirms; the backup is officially on, and the person who raised it is told.</li>
+    <li><strong>Session done</strong> — the class is delivered. If it was <em>online</em>, the ticket can now close.</li>
+    <li><strong>Invoice</strong> (offline only) — within 24 hours the backup files travel/stay/other expenses with proof.</li>
+    <li><strong>Ops approved</strong> — Program Ops checks and approves the claim.</li>
+    <li><strong>HOD approved</strong> — the HOD gives the final sign-off.</li>
+    <li><strong>Closed</strong> — settled and done. (A ticket can also be <span class="pill r">Cancelled</span> if the backup is no longer needed.)</li>
+  </ol>
+
+  <div class="box avoid">
+    <span class="t">Two endings</span>
+    <strong>Online</strong> sessions finish quickly: Session Done → Closed. <strong>Offline</strong> sessions have the extra money trail: Invoice → Ops → HOD → Closed.
+  </div>
+  <p class="small">Every single step is written to the history log (who did it and when), so nothing is ever lost or unclear.</p>
+
+  <h3>Routing map — who acts and who is told</h3>
+  <p>At each stage, one role <strong>acts</strong> and the system automatically <strong>notifies</strong> the next people who need to know (in-app + email + Teams). This is the heart of "nothing falls through the cracks."</p>
+  <table class="avoid">
+    <tr><th>Stage</th><th>Who acts</th><th>Automatically notified</th></tr>
+    <tr><td>Raised</td><td>University Staff / Ops (or Zoho)</td><td>Program Ops <em>+ all Capability Managers of that subject</em>. If the subject has no capability → admins get a "Needs admin" alert.</td></tr>
+    <tr><td>Backup assigned</td><td>Capability Manager / Ops</td><td>The assigned backup instructor.</td></tr>
+    <tr><td>Confirmed &amp; dispatched</td><td>Program Ops</td><td>The assigned backup <em>and</em> the person who raised the ticket.</td></tr>
+    <tr><td>Session done</td><td>Ops (online can close here)</td><td>—</td></tr>
+    <tr><td>Invoice filed (offline)</td><td>Backup instructor</td><td>Program Ops (to review the claim).</td></tr>
+    <tr><td>Invoice reminder</td><td>System (every few hours)</td><td>The backup — until they upload, while the window is open.</td></tr>
+    <tr><td>24h window missed</td><td>System</td><td>A red-flag alert (also shown on the Invoices page).</td></tr>
+    <tr><td>Ops approved</td><td>Program Ops</td><td>The HOD (for final sign-off).</td></tr>
+    <tr><td>HOD approved → Closed</td><td>HOD</td><td>The backup instructor.</td></tr>
+  </table>
+  <div class="box info avoid">
+    <span class="t">Reading the map</span>
+    Follow any row: the "acts" column is your cue to do something; the "notified" column is who will hear about it next. If you're waiting, you'll be pinged when it's genuinely your turn — you don't need to keep checking.
+  </div>
+</section>
+
+<!-- ============ 5. SIGN IN ============ -->
+<section class="section-wrap">
+  <div class="eyebrow">Do the work · 5</div>
+  <h2 class="section">5 · Signing in</h2>
+  <ol class="steps">
+    <li>Open <a href="https://backup-instructor-required.vercel.app">backup-instructor-required.vercel.app</a>.</li>
+    <li>Click <strong>Continue with Google</strong>.</li>
+    <li>Choose your <code>@nxtwave.in</code> or <code>@nxtwave.co.in</code> account. Only NIAT accounts are allowed.</li>
+  </ol>
+  <p>That's it — Backup OS reads your role automatically and takes you to your Dashboard.</p>
+
+  
+
+  <div class="box warn avoid">
+    <span class="t">"You don't have access yet"</span>
+    If you sign in and see a <em>pending</em> message, your email isn't on any directory or grant yet. Ask Program Ops to add you on the <strong>Access</strong> page, or ask your Capability Manager to add you to the Backup Pool with your email. Then use <strong>Re-check my access</strong>.
+  </div>
+</section>
+
+<!-- ============ 6. DASHBOARD ============ -->
+<section class="section-wrap">
+  <div class="eyebrow">Do the work · 6</div>
+  <h2 class="section">6 · The Dashboard</h2>
+  <p>The Dashboard is your home screen. It greets you by name and shows the size of the operation — how many universities, staff, instructors, backups, capabilities and subjects are in the system — plus the end-to-end flow strip so newcomers see the whole picture.</p>
+  <p>The top bar is how you move around. The menus are:</p>
+  <table>
+    <tr><th>Menu</th><th>What's under it</th></tr>
+    <tr><td>Dashboard</td><td>This home screen.</td></tr>
+    <tr><td>My Assignments</td><td>(Backups) the sessions you must cover.</td></tr>
+    <tr><td>Directories</td><td>Universities, University Staff, Instructors, Subject Sessions, Subjects, Capability Managers, Backup Pool.</td></tr>
+    <tr><td>Operations</td><td>Tickets, Invoices, HOD Approvals.</td></tr>
+    <tr><td>Analytics</td><td>Ticket and budget reports.</td></tr>
+    <tr><td>Logs</td><td>The full history and audit trail.</td></tr>
+    <tr><td>Access</td><td>(Admin only) grant and revoke roles.</td></tr>
+  </table>
+  <p>The <strong>bell</strong> at the top-right shows your notifications. Your name and role sit beside it, with <strong>Sign out</strong>.</p>
+  <p class="small">You only see the menus your role allows — a university staff member, for example, won't see Access.</p>
+</section>
+
+<!-- ============ 7. RAISE ============ -->
+<section class="section-wrap">
+  <div class="eyebrow">Do the work · 7</div>
+  <h2 class="section">7 · Raising an absence ticket</h2>
+  <p><strong>Who does this:</strong> University Staff (for their campus) or Program Ops. <em>Instructors cannot raise tickets.</em> Most tickets actually arrive automatically from Zoho (see Section 21) — but you can also raise one by hand.</p>
+
+  <h3>Steps</h3>
+  <ol class="steps">
+    <li>Go to <strong>Operations → Tickets</strong> and click <strong>Raise ticket</strong> (top-right).</li>
+    <li>Pick the <strong>University</strong> and the <strong>Subject</strong>.</li>
+    <li>Choose the <strong>absent instructor</strong>, the <strong>reason</strong> (sick, assigned other work, etc.), and the <strong>dates/time</strong> of the absence.</li>
+    <li>Optionally add <strong>notes</strong> and a suggested mode.</li>
+    <li>Click <strong>Raise</strong>. The ticket is created and instantly routed to Ops and the subject's Capability Manager(s).</li>
+  </ol>
+
+  
+
+  <div class="example avoid">
+    <span class="t">Example</span>
+    <p style="margin:.3em 0 0">Crescent University's staff member reports that <strong>Sanjay</strong> will be absent for <strong>Operating Systems</strong> on 18 Aug. They pick the university, the subject, the instructor, reason "Assigned other work," and the date, then click Raise. Ticket <code>BIT-0017</code> is created and the Operating Systems Capability Manager is notified within seconds.</p>
+  </div>
+
+  <div class="box info avoid">
+    <span class="t">New or unknown subject?</span>
+    If the subject isn't in the list, choose <strong>"Other (not listed)"</strong>. The ticket is still created and Program Ops is alerted to add the subject and its Capability Manager. See Section 17.
+  </div>
+
+  
+</section>
+
+<!-- ============ 8. ASSIGN ============ -->
+<section class="section-wrap">
+  <div class="eyebrow">Do the work · 8</div>
+  <h2 class="section">8 · Assigning a backup &amp; picking the mode</h2>
+  <p><strong>Who does this:</strong> the Capability Manager and/or Program Ops. Open the ticket from the Tickets list to see its <strong>Next action</strong> panel on the right.</p>
+
+  <h3>Steps</h3>
+  <ol class="steps">
+    <li>Open a <span class="pill o">Raised</span> ticket. The left side shows all the details; the right side is where you act.</li>
+    <li>Under <strong>Backup instructor (from pool)</strong>, pick a candidate. The system suggests good matches first and warns if someone is already busy or has a date clash. If the person isn't in the pool yet, use <strong>+ Add to pool</strong> or type a name.</li>
+    <li>Under <strong>Delivery mode</strong>, Program Ops chooses <strong>Online</strong> or <strong>Offline (on campus)</strong>.</li>
+    <li>Click <strong>Assign backup</strong>. The backup is attached and notified; the ticket moves to <span class="pill">Backup Assigned</span>.</li>
+  </ol>
+
+  
+
+  <div class="box info avoid">
+    <span class="t">The details you're working from</span>
+    The left panel shows the university, subject, capability, Capability Manager, the absent instructor, dates, requested mode, and who raised it. This is everything you need to make a good choice.
+  </div>
+
+  <div class="box warn avoid">
+    <span class="t">If the subject has no Capability Manager</span>
+    A special panel appears asking the admin to set up the capability + manager first. Once that's saved, the normal assign box appears. (More in Section 17.)
+  </div>
+</section>
+
+<!-- ============ 9. CONFIRM ============ -->
+<section class="section-wrap">
+  <div class="eyebrow">Do the work · 9</div>
+  <h2 class="section">9 · Confirm &amp; dispatch</h2>
+  <p><strong>Who does this:</strong> Program Ops. After a backup is assigned, Ops gives the final go-ahead.</p>
+  <ol class="steps">
+    <li>Open the <span class="pill">Backup Assigned</span> ticket.</li>
+    <li>Review the choice, then click <strong>Confirm &amp; dispatch</strong>.</li>
+    <li>The ticket becomes <span class="pill">Confirmed</span>. The backup is officially on, and the person who raised the ticket is automatically notified.</li>
+  </ol>
+  <div class="box good avoid">
+    <span class="t">Why a separate confirm step?</span>
+    It's the moment of commitment. Assigning is a proposal; confirming is "yes, this is happening" — and that's when the raiser and backup get the green light.
+  </div>
+  <p>After the class is taught, the ticket moves to <span class="pill">Session Done</span>. For <strong>online</strong> sessions, that's essentially the end — it can be closed. For <strong>offline</strong> sessions, the money trail begins (next section).</p>
+</section>
+
+<!-- ============ 10. SESSION + INVOICE ============ -->
+<section class="section-wrap">
+  <div class="eyebrow">Do the work · 10</div>
+  <h2 class="section">10 · The session &amp; the invoice (offline)</h2>
+  <p><strong>Who does this:</strong> the backup instructor. This only applies to <strong>offline</strong> (on-campus) sessions, where the backup had real expenses.</p>
+
+  <h3>The 24-hour rule</h3>
+  <p>The claim window opens at <strong>4 PM (IST) on the last day of the absence</strong> and stays open for <strong>24 hours</strong>. The backup must file the claim inside that window.</p>
+
+  <h3>Filing the claim</h3>
+  <ol class="steps">
+    <li>Open the ticket (or go to <strong>My Assignments</strong>) and find the <strong>Invoice &amp; approvals</strong> panel.</li>
+    <li>Enter the <strong>Session end date</strong> and a short description.</li>
+    <li>Fill the <strong>claim breakdown</strong>: <strong>Travel</strong>, <strong>Accommodation</strong>, and <strong>Other</strong>. The total adds up live.</li>
+    <li>Paste the <strong>NxtClaim</strong> link (required).</li>
+    <li>Upload the <strong>charge slips</strong> — up to <strong>5</strong> images/PDFs as proof.</li>
+    <li>Submit. The ticket moves to <span class="pill o">Invoice Pending</span> and Program Ops is notified to review.</li>
+  </ol>
+
+  
+
+  <div class="box warn avoid">
+    <span class="t">Reminders &amp; red flags</span>
+    While the window is open, Backup OS pings the backup on Teams (repeating every few hours) to "upload your invoice." If the 24 hours pass with no claim, the ticket gets a <span class="pill r">red flag</span> and the upload is <strong>locked</strong>.
+  </div>
+
+  <div class="box info avoid">
+    <span class="t">Missed the window? (late upload)</span>
+    After the deadline the backup can't upload. The panel shows a note to <em>contact Admin/CM</em>. An admin or HOD can press <strong>Approve late upload</strong>, which re-opens the window and notifies the backup so they can still file.
+  </div>
+
+  <div class="example avoid">
+    <span class="t">Example</span>
+    <p style="margin:.3em 0 0"><strong>Sparsh Sharma</strong> covered an offline Frontend session at Chaitanya University for absent instructor Attar Asif (ticket <code>BIT-0031</code>). After the class, Sparsh opens the ticket, enters travel ₹700 + accommodation ₹0 + other ₹300 = ₹1,000, pastes the NxtClaim link, uploads the bus ticket photo, and submits — all within 24 hours. The ticket becomes Invoice Pending.</p>
+  </div>
+</section>
+
+<!-- ============ 11. APPROVALS ============ -->
+<section class="section-wrap">
+  <div class="eyebrow">Do the work · 11</div>
+  <h2 class="section">11 · Approvals — Ops then HOD</h2>
+  <p>Offline claims are approved by <strong>two</strong> people, in order. This separation means no one can approve their own money.</p>
+
+  <h3>Step 1 — Program Ops approves</h3>
+  <ol class="steps">
+    <li>Ops opens the <span class="pill o">Invoice Pending</span> ticket (or the Invoices page).</li>
+    <li>They check the amount, the breakdown, the NxtClaim link and the charge slips.</li>
+    <li>They click <strong>Approve</strong> → the ticket becomes <span class="pill">Ops Approved</span> and the HOD is notified. (Or <strong>Return</strong> it for a fix.)</li>
+  </ol>
+
+  <h3>Step 2 — HOD gives final sign-off</h3>
+  <ol class="steps">
+    <li>The claim lands in the <strong>HOD Approvals</strong> queue (Operations menu).</li>
+    <li>The HOD verifies the same details.</li>
+    <li>They click <strong>Approve</strong> → the ticket becomes <span class="pill g">HOD Approved</span>, then <span class="pill g">Closed</span>. (Or <strong>Return</strong>.)</li>
+  </ol>
+
+  <div class="box good avoid">
+    <span class="t">Done</span>
+    Once the HOD approves and the ticket closes, the absence is fully handled and settled. It now shows in Analytics and the history log.
+  </div>
+</section>
+
+<!-- ============ 12. MY ASSIGNMENTS ============ -->
+<section class="section-wrap">
+  <div class="eyebrow">Every screen · 12</div>
+  <h2 class="section">12 · My Assignments <span class="small">(for backup instructors)</span></h2>
+  <p>This is the backup instructor's home. It lists the sessions you've been assigned, their status, and what to do next — including uploading your invoice for offline sessions.</p>
+  <p>The page also shows a simple 5-step reminder of how it works: <strong>Assigned → Dispatched → Invoice (offline) → Approvals → Closed</strong>.</p>
+  
+  <div class="box info avoid">
+    <span class="t">Nothing here yet?</span>
+    If your email isn't on any capability's Backup Pool, this page tells you so and asks you to have your Capability Manager add you (Directories → Backup Pool) with that email.
+  </div>
+</section>
+
+<!-- ============ 13. INVOICES ============ -->
+<section class="section-wrap">
+  <div class="eyebrow">Every screen · 13</div>
+  <h2 class="section">13 · Invoices</h2>
+  <p><strong>Who uses it:</strong> Program Ops and HOD. This is the master list of all offline claims and where they are in the approval chain.</p>
+  <p>At the top, a <strong>red-flagged</strong> banner calls out any claims that missed the 24-hour window. Below that, a table shows every claim with its ticket, university, state, subject, amount, who filed it, when, and its status. You can <strong>filter</strong> by status, state, university and filed-date, <strong>sort</strong>, and click <strong>Review</strong> to open a claim.</p>
+  
+</section>
+
+<!-- ============ 14. HOD APPROVALS ============ -->
+<section class="section-wrap">
+  <div class="eyebrow">Every screen · 14</div>
+  <h2 class="section">14 · HOD Approvals</h2>
+  <p><strong>Who uses it:</strong> HOD (and admins). This is the HOD's dedicated final-sign-off queue — only claims that Ops has already approved appear here, in order.</p>
+  <p>Each item shows the amount and a breakdown (travel/stay/other), the NxtClaim link and the charge slips, so the HOD can verify and then <strong>Approve</strong> or <strong>Return</strong>. A <strong>Total pending</strong> figure sits at the top.</p>
+  <p>Below the queue, <strong>Recently approved by HOD</strong> lists the last claims signed off — searchable, sortable, and clickable (each links straight to its ticket).</p>
+  
+</section>
+
+<!-- ============ 15. ANALYTICS ============ -->
+<section class="section-wrap">
+  <div class="eyebrow">Every screen · 15</div>
+  <h2 class="section">15 · Analytics</h2>
+  <p><strong>Who uses it:</strong> Program Ops, HOD and staff (scoped to what they can see). Analytics has two tabs.</p>
+
+  <h3>Backup ticket analytics</h3>
+  <p>Headline numbers (total tickets, open, closed, offline, red flags, average time to close) with clickable drill-downs. Explore <strong>who is absent most</strong> (State → University → Instructor, and a Top-absentees ranking), tickets over time (online vs offline), and workload per Capability Manager.</p>
+  
+
+  <h3>Budget analysis</h3>
+  <p>Spend numbers and trends over time, plus a budget explorer (by university, by state, by backup). Useful for seeing where money is going.</p>
+  
+
+  <div class="box info avoid">
+    <span class="t">Filters &amp; export</span>
+    Both tabs share the same filters — group by day/week/month/year, a date range, and <strong>State → University</strong> (the university list narrows to the chosen state). Any view can be exported to <strong>CSV</strong>.
+  </div>
+</section>
+
+<!-- ============ 16. DIRECTORIES ============ -->
+<section class="section-wrap">
+  <div class="eyebrow">Every screen · 16</div>
+  <h2 class="section">16 · Directories</h2>
+  <p>Directories are the reference lists Backup OS runs on. They all work the same way: a live table you can <strong>search</strong>, <strong>sort</strong> by any column, <strong>filter</strong> with the dropdowns, and add to with an inline <strong>+ Add</strong> row. Changes appear instantly for everyone and are written to the log.</p>
+  <table>
+    <tr><th>Directory</th><th>What it holds</th></tr>
+    <tr><td>Universities</td><td>The 40+ partner campuses (with their state).</td></tr>
+    <tr><td>University Staff</td><td>The people at each campus who report absences.</td></tr>
+    <tr><td>Instructors</td><td>The regular instructors at each campus.</td></tr>
+    <tr><td>Subject Sessions</td><td>The scheduled sessions per subject.</td></tr>
+    <tr><td>Subjects</td><td>All subjects, each linked to a capability.</td></tr>
+    <tr><td>Capability Managers</td><td>Subject verticals and the managers who own them (see Section 17).</td></tr>
+    <tr><td>Backup Pool</td><td>Candidate backups under each capability — the list a CM assigns from.</td></tr>
+  </table>
+  
+  
+  <div class="box info avoid">
+    <span class="t">Scoped for staff</span>
+    University Staff can add and edit their <em>own campus's</em> staff and instructors. They can't see or change other campuses.
+  </div>
+</section>
+
+<!-- ============ 17. CAPABILITY MANAGERS ============ -->
+<section class="section-wrap">
+  <div class="eyebrow">Every screen · 17</div>
+  <h2 class="section">17 · Capability Managers &amp; new subjects</h2>
+  <p>This one page manages two linked things: the <strong>subject verticals (capabilities)</strong> and the <strong>managers</strong> who own them. When a ticket lands for a subject, everyone listed here for that subject's vertical is notified (Teams @mention + email + in-app).</p>
+  <ul>
+    <li>The top <strong>Subject verticals</strong> panel lets you create, rename, or retire a vertical.</li>
+    <li>The table below lists the Capability Managers, each with their email (which is also their login) and the vertical they own. A vertical can have <strong>several</strong> managers.</li>
+  </ul>
+  
+
+  <h3 class="avoid">When a brand-new subject appears</h3>
+  <p>Sometimes a university reports an absence for a subject that isn't set up yet. Backup OS handles this safely:</p>
+  <ol class="steps">
+    <li>The ticket still gets created and is marked <span class="pill r">⚠ New subject — needs admin</span>. Program Ops is alerted on Teams and by email.</li>
+    <li>The admin comes to this page and — <strong>in this order</strong> — first <strong>adds the new subject vertical</strong> (top panel), then <strong>adds the Capability Manager(s)</strong> for it (the table below), choosing that new vertical.</li>
+    <li>The order matters: the manager's form has a required "Capability" dropdown that only lists verticals that already exist — so the vertical must be created first.</li>
+    <li>As soon as both exist, the managers are notified and the ticket flows normally.</li>
+  </ol>
+  <div class="box good avoid">
+    <span class="t">It wires itself up</span>
+    The moment a manager is added, their login role, the "lead" shown on tickets/cards, and all notifications for that subject start working automatically — no extra setup.
+  </div>
+</section>
+
+<!-- ============ 18. NOTIFICATIONS ============ -->
+<section class="section-wrap">
+  <div class="eyebrow">Every screen · 18</div>
+  <h2 class="section">18 · Notifications</h2>
+  <p>Backup OS makes sure the right person always knows it's their turn. Every important step notifies people three ways:</p>
+  <table>
+    <tr><th>Channel</th><th>What it is</th></tr>
+    <tr><td>In-app bell</td><td>The bell at the top-right of every page updates live. Open it to see, dismiss, or mark-all-read.</td></tr>
+    <tr><td>Email</td><td>A Gmail notification to the person's NIAT inbox.</td></tr>
+    <tr><td>Microsoft Teams</td><td>A rich card posted to the <strong>Backup OS Alerts</strong> channel that <strong>@mentions</strong> the responsible person (when their email is on file).</td></tr>
+  </table>
+  <h3>Who gets pinged, when</h3>
+  <ul>
+    <li><strong>On raise</strong> — all Capability Managers of that subject, plus Program Ops (always, as a safety net).</li>
+    <li><strong>On assign / confirm</strong> — the assigned backup.</li>
+    <li><strong>When the invoice is filed</strong> — Program Ops.</li>
+    <li><strong>When Ops approves</strong> — the HOD.</li>
+    <li><strong>Invoice reminders</strong> — the backup, repeatedly, until they upload (within the window).</li>
+  </ul>
+  <div class="box info avoid">
+    <span class="t">Teams @mentions</span>
+    An @mention only <em>pings</em> a person if they are a member of the Backup OS Alerts channel. Make sure your CMs and backups are added to that channel so their pings land.
+  </div>
+</section>
+
+<!-- ============ 19. LOGS ============ -->
+<section class="section-wrap">
+  <div class="eyebrow">Every screen · 19</div>
+  <h2 class="section">19 · Logs &amp; history</h2>
+  <p><strong>Who uses it:</strong> Program Ops, HOD, and staff (scoped to their campus). Logs is the complete trail of what happened.</p>
+  <ul>
+    <li><strong>University activity</strong> — every ticket step and every directory change: when, which university, the action, the target, who did it, and a note.</li>
+    <li><strong>Access history</strong> — (admin only) every time a role was granted, changed, or revoked.</li>
+  </ul>
+  <p>Filter by university and by type (tickets vs directory changes). This is where you go to answer "who did what, and when?"</p>
+  
+</section>
+
+<!-- ============ 20. ACCESS ============ -->
+<section class="section-wrap">
+  <div class="eyebrow">Every screen · 20</div>
+  <h2 class="section">20 · Access &amp; Roles <span class="small">(admin only)</span></h2>
+  <p><strong>Who uses it:</strong> Program Ops admins. This is where people are given (or removed from) access.</p>
+  <h3>Grant access</h3>
+  <ol class="steps">
+    <li>Enter the person's <strong>email</strong>.</li>
+    <li>Choose a <strong>role</strong> (Admin, HOD, Capability Manager, CMA, University Staff, Instructor).</li>
+    <li>Choose a <strong>scope</strong> — Global, a specific University, or a specific Capability — and the target.</li>
+    <li>Click <strong>Grant access</strong>.</li>
+  </ol>
+  <p>If the person hasn't signed in yet, the grant waits as a <strong>pending pre-authorization</strong> and is applied automatically the first time they log in. To change a role, revoke the old one and grant the new one — both actions are logged.</p>
+  
+  <div class="box warn avoid">
+    <span class="t">Guardrails</span>
+    A non-admin can't grant or revoke the Admin role, and no one can change their own role. Duties stay separated by design.
+  </div>
+</section>
+
+<!-- ============ 21. ZOHO ============ -->
+<section class="section-wrap">
+  <div class="eyebrow">Good to know · 21</div>
+  <h2 class="section">21 · Where tickets come from (Zoho)</h2>
+  <p>Universities already report things through <strong>Zoho</strong> forms. Backup OS is connected to Zoho so that when a university submits a "Backup Instructor Required" request, a ticket appears here <strong>automatically</strong> — no double entry.</p>
+  <ul>
+    <li>The connection is <strong>read-only from Zoho into Backup OS</strong>: tickets flow in, we never write back into Zoho's records.</li>
+    <li>The university is taken from the submitter's staff profile; the subject and instructor come straight from the form.</li>
+    <li>If the subject is new, the Zoho form offers <strong>"Other (not listed)"</strong>, which triggers the new-subject alert (Section 17).</li>
+    <li>Tickets that came from Zoho are marked as such in the history (e.g. "Raised via Zoho").</li>
+  </ul>
+  <div class="box good avoid">
+    <span class="t">Why this matters</span>
+    Staff keep using the form they already know, and Ops still gets one clean, tracked queue inside Backup OS.
+  </div>
+</section>
+
+<!-- ============ 22. FLAGS ============ -->
+<section class="section-wrap">
+  <div class="eyebrow">Good to know · 22</div>
+  <h2 class="section">22 · Flags &amp; special cases</h2>
+  <table>
+    <tr><th>Situation</th><th>What you'll see &amp; do</th></tr>
+    <tr><td><span class="pill r">Needs admin</span></td><td>A ticket for a subject with no capability/manager. The Tickets list shows a "Needs admin" badge. An admin sets up the capability + CM, then it flows on.</td></tr>
+    <tr><td><span class="pill r">Red flag</span></td><td>An offline claim missed the 24-hour window. It shows on the Invoices page banner and the backup's upload is locked.</td></tr>
+    <tr><td>Late upload</td><td>An admin/HOD presses <strong>Approve late upload</strong> to re-open the window so the backup can still file.</td></tr>
+    <tr><td>3 red flags</td><td>A backup who repeatedly misses windows can have their uploads blocked until an admin resets the count.</td></tr>
+    <tr><td><span class="pill r">Cancelled</span></td><td>If a backup is no longer needed, the ticket can be cancelled instead of continuing.</td></tr>
+    <tr><td>Online session</td><td>No invoice needed — it simply goes Session Done → Closed.</td></tr>
+  </table>
+</section>
+
+<!-- ============ 23. CHEAT SHEET ============ -->
+<section class="section-wrap">
+  <div class="eyebrow">Good to know · 23</div>
+  <h2 class="section">23 · What each role does <span class="small">(cheat-sheet)</span></h2>
+
+  <h4>University Staff</h4>
+  <ul><li>Raise absence tickets for your campus.</li><li>Keep your campus's staff and instructors up to date.</li><li>Track your campus's tickets and activity.</li></ul>
+
+  <h4>Capability Manager (CM)</h4>
+  <ul><li>Watch for tickets in your subject vertical (you're notified).</li><li>Pick a backup from your pool and keep the pool current.</li><li>Hand off to Ops to set the mode and confirm.</li></ul>
+
+  <h4>Program Ops (Admin)</h4>
+  <ul><li>Set the mode (online/offline), confirm &amp; dispatch.</li><li>Approve offline claims (first approval).</li><li>Manage directories, access, capabilities and new subjects.</li></ul>
+
+  <h4>HOD</h4>
+  <ul><li>Give the final sign-off on offline claims in HOD Approvals.</li><li>Approve or return; watch the budget in Analytics.</li></ul>
+
+  <h4>Backup Instructor</h4>
+  <ul><li>Check My Assignments for what to cover.</li><li>Deliver the session (go to campus if offline).</li><li>File your claim within 24 hours (offline), with NxtClaim link + slips.</li></ul>
+</section>
+
+<!-- ============ 24. FAQ ============ -->
+<section class="section-wrap">
+  <div class="eyebrow">Good to know · 24</div>
+  <h2 class="section">24 · Frequently asked questions</h2>
+
+  <h4>I signed in but I can't see anything. Why?</h4>
+  <p>Your email isn't linked to a role yet. Ask Program Ops to add you on the Access page, or your CM to add you to the Backup Pool with your email, then use <strong>Re-check my access</strong>.</p>
+
+  <h4>Can an instructor raise a ticket?</h4>
+  <p>No — raising is done by University Staff or Program Ops. Instructors see only their own assignments.</p>
+
+  <h4>What if the class was online?</h4>
+  <p>No invoice is needed. The ticket goes straight from Session Done to Closed.</p>
+
+  <h4>I'm a backup and I missed the 24-hour window.</h4>
+  <p>Contact Admin or your CM. An admin/HOD can approve a late upload, which re-opens the window for you.</p>
+
+  <h4>A subject isn't in the list.</h4>
+  <p>Choose "Other (not listed)" when raising. Program Ops will add the subject and its Capability Manager, then the ticket continues.</p>
+
+  <h4>Who approves the money?</h4>
+  <p>Two people, in order: Program Ops first, then the HOD. The same person can never do both.</p>
+
+  <h4>Where can I see everything that happened to a ticket?</h4>
+  <p>Open the ticket (its timeline), or use the <strong>Logs</strong> page for the full history.</p>
+
+  <h4>Do I have to check the app all day?</h4>
+  <p>No. Backup OS notifies the right person by in-app bell, email, and Teams @mention whenever it's their turn.</p>
+
+  <hr>
+  <p class="small">Backup OS · NIAT — NxtWave of Innovation in Advanced Technologies · Internal use only. For access or issues, contact Program Ops (programopscentral@nxtwave.in).</p>
+</section>
+
+<!-- ============ 25. PAGE MAP ============ -->
+<section class="section-wrap">
+  <div class="eyebrow">Appendix · 25</div>
+  <h2 class="section">25 · Page &amp; routing map</h2>
+  <p>Every screen in Backup OS lives at a web address (a "route"). You never need to type these — the menus take you there — but this map shows the whole app at a glance and <strong>who can see each page</strong>. Admin and HOD can see everything; other roles see a filtered slice.</p>
+
+  <h3>Top navigation</h3>
+  <table>
+    <tr><th>Menu → Page</th><th>Address</th><th>Who sees it</th></tr>
+    <tr><td>Dashboard</td><td><code>/dashboard</code></td><td>Everyone</td></tr>
+    <tr><td>My Assignments</td><td><code>/dashboard/my-assignments</code></td><td>Instructors / backups (admins/HOD too)</td></tr>
+    <tr><td>Analytics</td><td><code>/dashboard/analytics</code></td><td>Ops, HOD, Staff (scoped)</td></tr>
+    <tr><td>Logs</td><td><code>/dashboard/logs</code></td><td>Everyone (scoped to what you can see)</td></tr>
+    <tr><td>Access</td><td><code>/dashboard/access</code></td><td>Admins only</td></tr>
+  </table>
+
+  <h3>Directories menu</h3>
+  <table>
+    <tr><th>Page</th><th>Address</th><th>Who sees it</th></tr>
+    <tr><td>Universities</td><td><code>/dashboard/universities</code></td><td>Staff (own campus), Ops, HOD</td></tr>
+    <tr><td>University Staff</td><td><code>/dashboard/staff</code></td><td>Staff (own campus), Ops, HOD</td></tr>
+    <tr><td>Instructors</td><td><code>/dashboard/instructors</code></td><td>Staff (own campus), Ops, HOD</td></tr>
+    <tr><td>Subject Sessions</td><td><code>/dashboard/subject-sessions</code></td><td>Staff (own campus), Ops, HOD</td></tr>
+    <tr><td>Subjects</td><td><code>/dashboard/subjects</code></td><td>Ops, HOD</td></tr>
+    <tr><td>Capability Managers</td><td><code>/dashboard/capability-managers</code></td><td>CM, Ops, HOD</td></tr>
+    <tr><td>Backup Pool</td><td><code>/dashboard/backup-pool</code></td><td>CM (own vertical), Ops, HOD</td></tr>
+  </table>
+
+  <h3>Operations menu</h3>
+  <table>
+    <tr><th>Page</th><th>Address</th><th>Who sees it</th></tr>
+    <tr><td>Tickets (list)</td><td><code>/dashboard/tickets</code></td><td>Everyone (scoped)</td></tr>
+    <tr><td>Raise ticket</td><td><code>/dashboard/tickets/new</code></td><td>Staff, Ops</td></tr>
+    <tr><td>Ticket detail</td><td><code>/dashboard/tickets/&lt;id&gt;</code></td><td>Anyone allowed to see that ticket</td></tr>
+    <tr><td>Invoices</td><td><code>/dashboard/invoices</code></td><td>Ops, HOD</td></tr>
+    <tr><td>HOD Approvals</td><td><code>/dashboard/hod-approvals</code></td><td>Ops, HOD</td></tr>
+  </table>
+
+  <h3>How a ticket "routes" through the app</h3>
+  <p>Putting the two ideas together — the stages and the pages:</p>
+  <ol class="steps">
+    <li>A ticket is born on <code>/dashboard/tickets</code> (by hand via <em>Raise ticket</em>, or automatically from Zoho).</li>
+    <li>It is worked on its own page <code>/dashboard/tickets/&lt;id&gt;</code> — assign, set mode, confirm — with each action notifying the next role.</li>
+    <li>Offline claims then appear on <code>/dashboard/invoices</code> for Ops, and on <code>/dashboard/hod-approvals</code> for the HOD.</li>
+    <li>Every action along the way is recorded on <code>/dashboard/logs</code>, and the numbers roll up into <code>/dashboard/analytics</code>.</li>
+  </ol>
+
+  <div class="box good avoid">
+    <span class="t">The whole product in one sentence</span>
+    Absence → ticket on the Tickets page → routed to Ops + the subject's Capability Managers → backup &amp; mode set → confirmed → delivered → (offline) claim on Invoices → Ops → HOD Approvals → closed, with notifications and a full log at every step.
+  </div>
+</section>
+
+</body>
+</html>
