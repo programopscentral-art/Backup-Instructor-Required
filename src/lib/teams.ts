@@ -196,6 +196,69 @@ export function buildReminderCard(d: ReminderDetails): unknown {
   return { type: "message", attachments: [{ contentType: "application/vnd.microsoft.card.adaptive", content: card }] };
 }
 
+export interface HodApprovalDetails {
+  ticketNo: string;
+  university: string | null;
+  subject: string | null;
+  capabilityManager: string | null;
+  backup: string | null;
+  mode: string | null;
+  amount: number | null;
+  travel: number | null;
+  accommodation: number | null;
+  other: number | null;
+  nxtclaimLink: string | null;
+  approvedByOps: string | null;
+  hodQueueUrl: string;
+  mentions?: Mention[];
+}
+
+const rupee = (n: number | null | undefined): string | null =>
+  n == null ? null : `₹ ${Number(n).toLocaleString("en-IN")}`;
+
+/**
+ * Dedicated HOD-channel card: "your approval is next". Posted to the separate
+ * HOD Teams channel when Ops approves a claim, so the HOD is pinged with the
+ * full breakdown and a button straight to the HOD Approvals queue.
+ */
+export function buildHodApprovalCard(d: HodApprovalDetails): unknown {
+  const facts: { title: string; value: string }[] = [];
+  if (d.university) facts.push({ title: "University", value: d.university });
+  if (d.subject) facts.push({ title: "Subject", value: d.subject });
+  if (d.capabilityManager)
+    facts.push({ title: d.capabilityManager.includes(",") ? "Capability Managers" : "Capability Manager", value: d.capabilityManager });
+  if (d.backup) facts.push({ title: "Backup", value: d.backup });
+  if (d.mode && d.mode !== "undecided") facts.push({ title: "Mode", value: MODE_LABEL[d.mode] ?? d.mode });
+  const total = rupee(d.amount);
+  if (total) facts.push({ title: "Claim total", value: total });
+  const travel = rupee(d.travel), stay = rupee(d.accommodation), other = rupee(d.other);
+  if (travel) facts.push({ title: "· Travel", value: travel });
+  if (stay) facts.push({ title: "· Accommodation", value: stay });
+  if (other) facts.push({ title: "· Other", value: other });
+  if (d.approvedByOps) facts.push({ title: "Approved by Ops", value: d.approvedByOps });
+
+  const { block: mBlock, entities } = mentionArtifacts(d.mentions);
+
+  const actions: unknown[] = [{ type: "Action.OpenUrl", title: "Review & approve →", url: d.hodQueueUrl }];
+  if (d.nxtclaimLink) actions.push({ type: "Action.OpenUrl", title: "Open NxtClaim", url: d.nxtclaimLink });
+
+  const card = {
+    type: "AdaptiveCard",
+    $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
+    version: "1.4",
+    body: [
+      { type: "TextBlock", text: `⏳ Your approval is next — ${d.ticketNo}`, weight: "Bolder", size: "Medium", color: "Warning", wrap: true },
+      { type: "TextBlock", text: "Backup OS · Ops approved this claim · final HOD sign-off pending", isSubtle: true, spacing: "None", size: "Small", wrap: true },
+      ...(mBlock ? [mBlock] : []),
+      { type: "FactSet", facts },
+      { type: "TextBlock", text: "Please verify the amount and charge slips, then Approve or Return in the dashboard.", wrap: true, isSubtle: true, size: "Small", spacing: "Small" },
+      { type: "ActionSet", actions },
+    ],
+    ...(entities.length ? { msteams: { entities } } : {}),
+  };
+  return { type: "message", attachments: [{ contentType: "application/vnd.microsoft.card.adaptive", content: card }] };
+}
+
 /** POST the card to the Teams Workflow URL. Returns true on 2xx. Never throws. */
 export async function postToTeams(webhookUrl: string, payload: unknown): Promise<boolean> {
   try {

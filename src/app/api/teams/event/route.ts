@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { buildTeamsCard, buildReminderCard, postToTeams, type TeamsEvent, type Mention } from "@/lib/teams";
+import { buildTeamsCard, buildReminderCard, buildHodApprovalCard, postToTeams, type TeamsEvent, type Mention } from "@/lib/teams";
 
 export const dynamic = "force-dynamic";
 
@@ -87,7 +87,7 @@ export async function POST(req: Request) {
   // DB-driven — no Vercel env change needed to activate/rotate. Env is a fallback.
   const { data: cfg } = await db
     .from("teams_config")
-    .select("enabled, teams_webhook_url, dispatch_secret")
+    .select("enabled, teams_webhook_url, hod_webhook_url, dispatch_secret")
     .eq("id", true)
     .maybeSingle();
 
@@ -163,13 +163,21 @@ export async function POST(req: Request) {
   const { data: ev } = await db
     .from("ticket_events")
     .select(
-      "id, from_status, to_status, note, actor_name, teams_sent_at, ticket_id, tickets(ticket_no, mode, capability_id, assigned_backup_id, assigned_backup_name, absent_instructor_name, universities(name), subjects(name), capabilities(manager_name, manager_email))",
+      "id, from_status, to_status, note, actor_name, teams_sent_at, hod_teams_sent_at, ticket_id, tickets(ticket_no, mode, capability_id, assigned_backup_id, assigned_backup_name, absent_instructor_name, universities(name), subjects(name), capabilities(manager_name, manager_email))",
     )
     .eq("id", eventId)
     .maybeSingle();
 
   if (!ev) return NextResponse.json({ ok: false, error: "event not found" }, { status: 404 });
-  if (ev.teams_sent_at) return NextResponse.json({ ok: true, skipped: "already sent" });
+
+  // Two independent deliveries per event:
+  //   • main channel — every event (teams_sent_at)
+  //   • HOD channel  — only the ops_approved → "your approval is next" card,
+  //     to a SEPARATE HOD webhook, tracked by hod_teams_sent_at.
+  const hodWebhook = (cfg?.hod_webhook_url as string | null) ?? process.env.TEAMS_HOD_WEBHOOK_URL ?? null;
+  const needMain = !ev.teams_sent_at;
+  const needHod = ev.to_status === "ops_approved" && !!hodWebhook && !ev.hod_teams_sent_at;
+  if (!needMain && !needHod) return NextResponse.json({ ok: true, skipped: "already sent" });
 
   const t = ev.tickets as unknown as {
     ticket_no: string;
@@ -183,63 +191,104 @@ export async function POST(req: Request) {
     capabilities: { manager_name: string | null; manager_email: string | null } | null;
   } | null;
 
-  // Who is @mentioned on this card (email present → real ping; else omitted).
-  let mentions: Mention[] = [];
-  const noteL = (ev.note || "").toLowerCase();
-  if (ev.to_status === "raised") {
-    mentions = await capabilityMentions(db, t?.capability_id ?? null); // all CMs of the capability
-    if (mentions.length === 0) mentions = await roleMentions(db, ["admin"]); // no CMs (new/unknown subject) → page admins
-  } else if (ev.to_status === "backup_assigned") {
-    // A backup was picked → ping the backup AND every Capability Manager of the
-    // subject (all owners, not just the lead), de-duplicated by email.
-    mentions = dedupeMentions(
-      await backupMention(db, t?.assigned_backup_id ?? null),
-      await capabilityMentions(db, t?.capability_id ?? null),
-    );
-  } else if (ev.to_status === "confirmed" || ev.to_status === "hod_approved") {
-    mentions = await backupMention(db, t?.assigned_backup_id ?? null);
-  } else if (ev.to_status === "ops_approved") {
-    mentions = await roleMentions(db, ["hod", "admin"]);
-  } else if (ev.to_status === "invoice_pending") {
-    // invoice filed → Ops; reminder / red flag / returned / to-invoice → the backup
-    mentions = noteL.includes("invoice submitted")
-      ? await roleMentions(db, ["admin"])
-      : await backupMention(db, t?.assigned_backup_id ?? null);
-  }
-
-  // Amount is only relevant for invoice-stage cards — fetch it lazily.
-  let amount: number | null = null;
-  if (["invoice_pending", "ops_approved", "hod_approved", "closed"].includes(ev.to_status)) {
-    const { data: inv } = await db.from("invoices").select("amount").eq("ticket_id", ev.ticket_id).maybeSingle();
-    amount = (inv as { amount: number | null } | null)?.amount ?? null;
-  }
-
-  // Show ALL Capability Managers of the subject (comma-joined), not just the lead.
+  // Show ALL Capability Managers of the subject (comma-joined), not just the
+  // lead — used by both the main card and the HOD card.
   const cmDisplay = await capabilityNames(db, t?.capability_id ?? null, t?.capabilities?.manager_name ?? null);
 
-  const payload: TeamsEvent = {
-    ticketNo: t?.ticket_no ?? "—",
-    fromStatus: ev.from_status,
-    toStatus: ev.to_status,
-    note: ev.note,
-    actorName: ev.actor_name,
-    university: t?.universities?.name ?? null,
-    subject: t?.subjects?.name ?? null,
-    capabilityManager: cmDisplay,
-    backup: t?.assigned_backup_name ?? null,
-    mode: t?.mode ?? null,
-    absentInstructor: t?.absent_instructor_name ?? null,
-    amount,
-    ticketUrl: `${base}/dashboard/tickets/${ev.ticket_id}`,
-    mentions,
-  };
+  // ---- Main channel card (every event) ----
+  let mainOk = !needMain;
+  if (needMain) {
+    // Who is @mentioned on this card (email present → real ping; else omitted).
+    let mentions: Mention[] = [];
+    const noteL = (ev.note || "").toLowerCase();
+    if (ev.to_status === "raised") {
+      mentions = await capabilityMentions(db, t?.capability_id ?? null); // all CMs of the capability
+      if (mentions.length === 0) mentions = await roleMentions(db, ["admin"]); // no CMs (new/unknown subject) → page admins
+    } else if (ev.to_status === "backup_assigned") {
+      // A backup was picked → ping the backup AND every Capability Manager of the
+      // subject (all owners, not just the lead), de-duplicated by email.
+      mentions = dedupeMentions(
+        await backupMention(db, t?.assigned_backup_id ?? null),
+        await capabilityMentions(db, t?.capability_id ?? null),
+      );
+    } else if (ev.to_status === "confirmed" || ev.to_status === "hod_approved") {
+      mentions = await backupMention(db, t?.assigned_backup_id ?? null);
+    } else if (ev.to_status === "ops_approved") {
+      mentions = await roleMentions(db, ["hod", "admin"]);
+    } else if (ev.to_status === "invoice_pending") {
+      // invoice filed → Ops; reminder / red flag / returned / to-invoice → the backup
+      mentions = noteL.includes("invoice submitted")
+        ? await roleMentions(db, ["admin"])
+        : await backupMention(db, t?.assigned_backup_id ?? null);
+    }
 
-  const sent = await postToTeams(webhook, buildTeamsCard(payload));
-  if (!sent) {
-    // Leave teams_sent_at null so the retry cron picks it up.
-    return NextResponse.json({ ok: false, error: "teams post failed" }, { status: 502 });
+    // Amount is only relevant for invoice-stage cards — fetch it lazily.
+    let amount: number | null = null;
+    if (["invoice_pending", "ops_approved", "hod_approved", "closed"].includes(ev.to_status)) {
+      const { data: inv } = await db.from("invoices").select("amount").eq("ticket_id", ev.ticket_id).maybeSingle();
+      amount = (inv as { amount: number | null } | null)?.amount ?? null;
+    }
+
+    const payload: TeamsEvent = {
+      ticketNo: t?.ticket_no ?? "—",
+      fromStatus: ev.from_status,
+      toStatus: ev.to_status,
+      note: ev.note,
+      actorName: ev.actor_name,
+      university: t?.universities?.name ?? null,
+      subject: t?.subjects?.name ?? null,
+      capabilityManager: cmDisplay,
+      backup: t?.assigned_backup_name ?? null,
+      mode: t?.mode ?? null,
+      absentInstructor: t?.absent_instructor_name ?? null,
+      amount,
+      ticketUrl: `${base}/dashboard/tickets/${ev.ticket_id}`,
+      mentions,
+    };
+    mainOk = await postToTeams(webhook, buildTeamsCard(payload));
+    if (mainOk) await db.from("ticket_events").update({ teams_sent_at: new Date().toISOString() }).eq("id", eventId);
   }
 
-  await db.from("ticket_events").update({ teams_sent_at: new Date().toISOString() }).eq("id", eventId);
-  return NextResponse.json({ ok: true, sent: true });
+  // ---- Dedicated HOD channel card (ops_approved only → "your approval is next") ----
+  let hodOk = !needHod;
+  if (needHod) {
+    const { data: inv } = await db
+      .from("invoices")
+      .select("amount, travel_amount, accommodation_amount, other_amount, nxtclaim_link")
+      .eq("ticket_id", ev.ticket_id)
+      .maybeSingle();
+    const iv = inv as {
+      amount: number | null;
+      travel_amount: number | null;
+      accommodation_amount: number | null;
+      other_amount: number | null;
+      nxtclaim_link: string | null;
+    } | null;
+    hodOk = await postToTeams(
+      hodWebhook as string,
+      buildHodApprovalCard({
+        ticketNo: t?.ticket_no ?? "—",
+        university: t?.universities?.name ?? null,
+        subject: t?.subjects?.name ?? null,
+        capabilityManager: cmDisplay,
+        backup: t?.assigned_backup_name ?? null,
+        mode: t?.mode ?? null,
+        amount: iv?.amount ?? null,
+        travel: iv?.travel_amount ?? null,
+        accommodation: iv?.accommodation_amount ?? null,
+        other: iv?.other_amount ?? null,
+        nxtclaimLink: iv?.nxtclaim_link ?? null,
+        approvedByOps: ev.actor_name,
+        hodQueueUrl: `${base}/dashboard/hod-approvals`,
+        mentions: await roleMentions(db, ["hod"]), // ping the HOD(s) in their own channel
+      }),
+    );
+    if (hodOk) await db.from("ticket_events").update({ hod_teams_sent_at: new Date().toISOString() }).eq("id", eventId);
+  }
+
+  if (!mainOk || !hodOk) {
+    // Leave the unsent flag null so the retry cron re-fires just what failed.
+    return NextResponse.json({ ok: false, error: "teams post failed", mainOk, hodOk }, { status: 502 });
+  }
+  return NextResponse.json({ ok: true, sent: true, hod: needHod });
 }
