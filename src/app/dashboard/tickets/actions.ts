@@ -643,3 +643,183 @@ export async function resolveTicketIntake(_prev: ActionState, formData: FormData
   revalidatePath("/dashboard/tickets");
   return { ok: `Resolved — ${notes.join("; ")}.` };
 }
+
+/**
+ * Re-assign a ticket to a DIFFERENT backup instructor without cancelling it —
+ * for when the assigned backup is on leave / unavailable. Allowed while the
+ * ticket is `backup_assigned` (CM of the capability, or Ops) or `confirmed`
+ * (Ops only — RLS boxes CMs out after confirmation). Keeps the status; only the
+ * person changes. Notifies the new backup, the released backup, and the CMs.
+ */
+export async function reassignBackup(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const ctx = await getSessionContext();
+  if (!ctx) return { error: "Not signed in." };
+
+  const ticketId = String(formData.get("ticket_id") || "");
+  const backupId = String(formData.get("assigned_backup_id") || "") || null;
+  const backupName = String(formData.get("assigned_backup_name") || "").trim();
+  const reason = String(formData.get("reason") || "").trim() || undefined;
+  if (!ticketId) return { error: "Missing ticket." };
+  if (!backupId && !backupName) return { error: "Pick a replacement backup instructor." };
+
+  const adminLike = isAdminLike(ctx.roles);
+  const isCM = ctx.roles.includes("capability_manager") || ctx.roles.includes("cma");
+  if (!adminLike && !isCM) return { error: "Not authorized to change the backup." };
+
+  const supabase = await createAuthedClient();
+  const { data: ticket } = await supabase
+    .from("tickets")
+    .select("id, ticket_no, status, capability_id, mode, assigned_backup_id, assigned_backup_name, universities(name), subjects(name)")
+    .eq("id", ticketId)
+    .maybeSingle();
+  if (!ticket) return { error: "Ticket not found." };
+
+  const t = ticket as unknown as {
+    ticket_no: string; status: TicketStatus; capability_id: string | null; mode: string;
+    assigned_backup_id: string | null; assigned_backup_name: string | null;
+    universities: { name: string } | null; subjects: { name: string } | null;
+  };
+
+  if (t.status !== "backup_assigned" && t.status !== "confirmed") {
+    return { error: "You can only change the backup before the session is delivered." };
+  }
+  if (t.status === "confirmed" && !adminLike) {
+    return { error: "After confirmation, only Ops can change the backup." };
+  }
+
+  // The replacement must belong to this ticket's capability (no cross-capability
+  // assignment via a crafted id); read its email for reachability.
+  let backupEmail: string | null = null;
+  if (backupId) {
+    const { data: bp } = await supabase.from("backup_instructor_pool").select("capability_id, email").eq("id", backupId).maybeSingle();
+    if (!bp) return { error: "Selected backup not found." };
+    if (t.capability_id && bp.capability_id !== t.capability_id) return { error: "That backup belongs to a different capability." };
+    backupEmail = (bp as { email: string | null }).email;
+  }
+  if (backupId && backupId === t.assigned_backup_id) return { error: "That instructor is already the assigned backup." };
+
+  const oldName = t.assigned_backup_name;
+  const oldBackupId = t.assigned_backup_id;
+
+  const { error } = await supabase
+    .from("tickets")
+    .update({ assigned_backup_id: backupId, assigned_backup_name: backupName || null, assigned_cm: ctx.userId, updated_at: new Date().toISOString() })
+    .eq("id", ticketId);
+  if (error) {
+    if (/row-level security/i.test(error.message)) return { error: "You don't have permission to change the backup on this ticket." };
+    return { error: error.message };
+  }
+
+  let note = `Backup re-assigned: ${oldName ?? "—"} → ${backupName || "—"}${reason ? ` — ${reason}` : ""}.`;
+  if (!backupEmail) note += " ⚠ New backup has no email on file — they won't be auto-notified or able to upload a claim.";
+  await logEvent(supabase, ticketId, ctx.userId, ctx.profile?.full_name || ctx.email, t.status, t.status, note);
+
+  const subj = t.subjects?.name ?? "the subject";
+  const uni = t.universities?.name ?? "the university";
+  // New backup — they're on now.
+  await notifyBackup(backupId, {
+    ticketId,
+    title: `👤 You're the backup — ${t.ticket_no}`,
+    body: `You've been assigned as the backup for ${subj} at ${uni} (${t.mode}). ${t.status === "confirmed" ? "Please take the session as scheduled." : "Awaiting Ops confirmation — you'll be notified once dispatched."}`,
+  });
+  // Released backup — so they know they're off it.
+  if (oldBackupId && oldBackupId !== backupId) {
+    await notifyBackup(oldBackupId, {
+      ticketId,
+      title: `↩️ Released from ${t.ticket_no}`,
+      body: `You're no longer the backup for ${subj} at ${uni} — another instructor has been assigned. No action needed.`,
+    });
+  }
+  // Every Capability Manager of the subject (skip the actor).
+  await notifyCapabilityManagers(
+    t.capability_id,
+    {
+      ticketId,
+      title: `↻ Backup changed — ${t.ticket_no}`,
+      body: `The backup for ${subj} at ${uni} was changed to ${backupName || "—"}${oldName ? ` (was ${oldName})` : ""}${reason ? ` — ${reason}` : ""}.`,
+    },
+    ctx.email,
+  );
+
+  revalidatePath(`/dashboard/tickets/${ticketId}`);
+  revalidatePath("/dashboard/tickets");
+  return { ok: "Backup re-assigned." };
+}
+
+/**
+ * Add a remark to a ticket. Any role that can see the ticket may post; RLS
+ * enforces the audience. All remarks are visible to everyone on the ticket.
+ * Also drops a light in-app alert (bell only, no email) to the other people on
+ * the ticket so a new remark isn't missed.
+ */
+export async function addRemark(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const ctx = await getSessionContext();
+  if (!ctx) return { error: "Not signed in." };
+
+  const ticketId = String(formData.get("ticket_id") || "");
+  const body = String(formData.get("body") || "").trim();
+  if (!ticketId) return { error: "Missing ticket." };
+  if (!body) return { error: "Write a remark first." };
+  if (body.length > 4000) return { error: "Remark is too long (max 4000 characters)." };
+
+  const supabase = await createAuthedClient();
+  const authorName = ctx.profile?.full_name || ctx.email;
+  const { error } = await supabase.from("ticket_remarks").insert({
+    ticket_id: ticketId,
+    author_id: ctx.userId,
+    author_name: authorName,
+    author_role: ctx.roles[0] ?? null,
+    body,
+  });
+  if (error) {
+    if (/row-level security/i.test(error.message)) return { error: "You don't have access to this ticket." };
+    return { error: error.message };
+  }
+
+  // Light in-app alert to the OTHER people on the ticket (bell only — no email,
+  // so an active thread never floods inboxes). Best-effort; via service role
+  // because notifications_insert is locked to admin/HOD.
+  try {
+    const admin = createAdminClient();
+    const { data: tk } = await admin
+      .from("tickets")
+      .select("ticket_no, raised_by, raised_by_email, capability_id, assigned_backup_id")
+      .eq("id", ticketId)
+      .maybeSingle();
+    const info = tk as unknown as { ticket_no: string; raised_by: string | null; raised_by_email: string | null; capability_id: string | null; assigned_backup_id: string | null } | null;
+    if (info) {
+      const recips = new Map<string, { userId: string | null; email: string | null }>();
+      const add = (userId: string | null, email: string | null) => {
+        const key = (userId ?? email ?? "").toLowerCase();
+        if (!key) return;
+        if (userId === ctx.userId) return; // never notify the author
+        if (email && ctx.email && email.toLowerCase() === ctx.email.toLowerCase()) return;
+        if (!recips.has(key)) recips.set(key, { userId, email });
+      };
+      if (info.raised_by || info.raised_by_email) add(info.raised_by, info.raised_by_email);
+      if (info.assigned_backup_id) {
+        const { data: bp } = await admin.from("backup_instructor_pool").select("email").eq("id", info.assigned_backup_id).maybeSingle();
+        const be = (bp as { email: string | null } | null)?.email ?? null;
+        if (be) { const { data: p } = await admin.from("profiles").select("id").ilike("email", be).maybeSingle(); add((p as { id: string } | null)?.id ?? null, be); }
+      }
+      if (info.capability_id) {
+        const { data: cms } = await admin.from("capability_managers").select("email").eq("capability_id", info.capability_id).eq("status", "active");
+        for (const cm of (cms ?? []) as { email: string | null }[]) {
+          const em = cm.email; if (!em) continue;
+          const { data: p } = await admin.from("profiles").select("id").ilike("email", em).maybeSingle();
+          add((p as { id: string } | null)?.id ?? null, em);
+        }
+      }
+      const title = `💬 New remark — ${info.ticket_no}`;
+      const msg = `${authorName}: ${body.length > 160 ? body.slice(0, 157) + "…" : body}`;
+      for (const r of recips.values()) {
+        await admin.from("notifications").insert({ recipient_user_id: r.userId, recipient_email: r.email, type: "remark", title, body: msg, ticket_id: ticketId });
+      }
+    }
+  } catch {
+    /* notifications are best-effort */
+  }
+
+  revalidatePath(`/dashboard/tickets/${ticketId}`);
+  return { ok: "Remark added." };
+}

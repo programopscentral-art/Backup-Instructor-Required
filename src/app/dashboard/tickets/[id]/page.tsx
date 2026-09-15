@@ -18,6 +18,7 @@ import { TicketActions } from "./ticket-actions";
 import { InvoicePanel, type InvoiceView } from "./invoice-panel";
 import { CapabilitySetup } from "./capability-setup";
 import { ResolveIntake } from "./resolve-intake";
+import { TicketRemarks } from "./ticket-remarks";
 
 export default async function TicketDetailPage({
   params,
@@ -38,7 +39,7 @@ export default async function TicketDetailPage({
     .maybeSingle();
   if (!ticket) notFound();
 
-  const [{ data: events }, { data: pool }, { data: allCaps }, { data: cmUsers }, { data: allUnis }, { data: allSubjects }, { data: ticketCms }] = await Promise.all([
+  const [{ data: events }, { data: pool }, { data: allCaps }, { data: cmUsers }, { data: allUnis }, { data: allSubjects }, { data: ticketCms }, { data: remarks }] = await Promise.all([
     supabase.from("ticket_events").select("*").eq("ticket_id", id).order("created_at", { ascending: true }),
     ticket.capability_id
       ? supabase
@@ -59,6 +60,12 @@ export default async function TicketDetailPage({
           .eq("status", "active")
           .order("created_at", { ascending: true })
       : Promise.resolve({ data: [] as never[] }),
+    // Remarks thread — visible to everyone who can see the ticket (RLS-enforced).
+    supabase
+      .from("ticket_remarks")
+      .select("id, author_name, author_role, body, created_at")
+      .eq("ticket_id", id)
+      .order("created_at", { ascending: true }),
   ]);
 
   const cmNames = ((ticketCms ?? []) as { name: string | null }[])
@@ -372,6 +379,10 @@ export default async function TicketDetailPage({
               </ol>
             </div>
           </FadeIn>
+
+          <FadeIn delay={0.18}>
+            <TicketRemarks ticketId={ticket.id} initial={(remarks ?? []) as never} />
+          </FadeIn>
         </div>
 
         {/* Actions */}
@@ -431,6 +442,7 @@ export default async function TicketDetailPage({
                 pool={enrichedPool as never}
                 perms={perms}
                 capabilityId={ticket.capability_id ?? null}
+                assignedBackupName={ticket.assigned_backup_name ?? null}
               />
             )}
           </div>

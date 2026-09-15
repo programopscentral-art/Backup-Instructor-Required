@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { transitionTicket, type ActionState } from "../actions";
+import { transitionTicket, reassignBackup, type ActionState } from "../actions";
 import type { TicketStatus, TicketMode } from "@/lib/tickets/status";
 
 interface PoolItem {
@@ -39,6 +39,7 @@ export function TicketActions({
   pool,
   perms,
   capabilityId = null,
+  assignedBackupName = null,
 }: {
   ticketId: string;
   status: TicketStatus;
@@ -46,6 +47,7 @@ export function TicketActions({
   pool: PoolItem[];
   perms: Perms;
   capabilityId?: string | null;
+  assignedBackupName?: string | null;
 }) {
   if (status === "closed" || status === "cancelled") {
     return (
@@ -69,12 +71,22 @@ export function TicketActions({
         />
       )}
 
+      {/* Change the assigned backup (e.g. the current one is on leave) without
+          cancelling. CM or Ops before confirmation; Ops only after. */}
+      {status === "backup_assigned" && perms.canAssign && (
+        <ReassignForm ticketId={ticketId} pool={pool} capabilityId={capabilityId} currentName={assignedBackupName} />
+      )}
+
       {status === "confirmed" && perms.canConfirm && (
         <Transition
           ticketId={ticketId}
           buttons={[{ action: "session", label: "Mark session delivered" }]}
           hint="Mark once the backup has taken the session."
         />
+      )}
+
+      {status === "confirmed" && perms.isAdmin && (
+        <ReassignForm ticketId={ticketId} pool={pool} capabilityId={capabilityId} currentName={assignedBackupName} />
       )}
 
       {status === "session_done" && perms.canConfirm && (
@@ -357,6 +369,129 @@ function AssignForm({
       <button type="submit" disabled={pending || !canSubmit} className="btn btn-primary w-full">
         {pending ? "Assigning…" : "Assign backup"}
       </button>
+    </form>
+  );
+}
+
+/**
+ * Change the assigned backup to a different pool instructor without cancelling
+ * the ticket — for when the current backup is on leave / unavailable. Collapsed
+ * by default so it never competes with the primary action.
+ */
+function ReassignForm({
+  ticketId,
+  pool,
+  capabilityId,
+  currentName,
+}: {
+  ticketId: string;
+  pool: PoolItem[];
+  capabilityId: string | null;
+  currentName: string | null;
+}) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(reassignBackup, {});
+  const supabase = createClient();
+  const [open, setOpen] = useState(false);
+  const [localPool, setLocalPool] = useState(pool);
+  const [selectedId, setSelectedId] = useState("");
+  const [addingPool, setAddingPool] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newEmp, setNewEmp] = useState("");
+  const [newMode, setNewMode] = useState("both");
+  const [busy, setBusy] = useState(false);
+  const [poolErr, setPoolErr] = useState<string | null>(null);
+
+  async function addToPool() {
+    const name = newName.trim();
+    const email = newEmail.trim().toLowerCase();
+    if (!name) return setPoolErr("Enter an instructor name.");
+    if (!email) return setPoolErr("Enter an email — without it the backup can't be notified or upload a claim.");
+    if (!EMAIL_RE.test(email)) return setPoolErr("Enter a valid email address.");
+    if (!capabilityId) return setPoolErr("No capability set on this ticket.");
+    const dupe = localPool.find((p) => (p.email ?? "").toLowerCase() === email);
+    if (dupe) { setSelectedId(dupe.id); setAddingPool(false); setPoolErr(null); return; }
+    setBusy(true); setPoolErr(null);
+    const { data, error } = await supabase
+      .from("backup_instructor_pool")
+      .insert({ instructor_name: name, email, emp_id: newEmp.trim() || null, capability_id: capabilityId, availability_mode: newMode, current_status: "available", status: "active" })
+      .select("id, instructor_name, emp_id, email, availability_mode, current_status")
+      .single();
+    setBusy(false);
+    if (error || !data) return setPoolErr(/duplicate|unique/i.test(error?.message ?? "") ? "A backup with that email already exists." : error?.message ?? "Failed to add.");
+    setLocalPool((l) => [...l, data]);
+    setSelectedId(data.id);
+    setNewName(""); setNewEmail(""); setNewEmp(""); setNewMode("both"); setAddingPool(false);
+  }
+
+  const selected = localPool.find((p) => p.id === selectedId) || null;
+
+  if (!open) {
+    return (
+      <div className="border-t border-[color:var(--line)] pt-4">
+        <button type="button" onClick={() => setOpen(true)} className="inline-flex items-center gap-1.5 text-xs font-semibold text-[color:var(--accent)] hover:underline">
+          ↻ Assign a different backup
+        </button>
+        <p className="mt-1 text-xs text-[color:var(--faint)]">If {currentName || "the assigned backup"} is on leave or unavailable, swap in another instructor without cancelling.</p>
+      </div>
+    );
+  }
+
+  return (
+    <form action={action} className="space-y-3 border-t border-[color:var(--line)] pt-4">
+      <input type="hidden" name="ticket_id" value={ticketId} />
+      <input type="hidden" name="assigned_backup_id" value={selected ? selected.id : ""} />
+      <input type="hidden" name="assigned_backup_name" value={selected ? selected.instructor_name : ""} />
+      <div className="flex items-center justify-between">
+        <label className="label">Re-assign backup{currentName ? ` (currently: ${currentName})` : ""}</label>
+        {capabilityId && !addingPool && (
+          <button type="button" onClick={() => setAddingPool(true)} className="text-xs font-semibold text-[color:var(--accent)] hover:underline">+ Add to pool</button>
+        )}
+      </div>
+
+      {addingPool ? (
+        <div className="space-y-2 rounded-xl border border-[color:var(--line)] bg-[color:var(--cream)] p-3">
+          <input className="input" placeholder="Full name *" value={newName} onChange={(e) => setNewName(e.target.value)} autoFocus />
+          <input className="input" type="email" placeholder="name@nxtwave.co.in *" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} />
+          <div className="flex gap-2">
+            <input className="input flex-1" placeholder="Emp ID (optional)" value={newEmp} onChange={(e) => setNewEmp(e.target.value)} />
+            <select className="select flex-1" value={newMode} onChange={(e) => setNewMode(e.target.value)}>
+              <option value="both">Both</option><option value="online">Online</option><option value="offline">Offline</option>
+            </select>
+          </div>
+          <div className="flex gap-2 pt-1">
+            <button type="button" onClick={addToPool} disabled={busy} className="btn btn-primary btn-sm">{busy ? "Adding…" : "Add to pool"}</button>
+            <button type="button" onClick={() => { setAddingPool(false); setPoolErr(null); }} className="btn btn-ghost btn-sm">Cancel</button>
+          </div>
+          {poolErr && <p className="text-xs text-[color:var(--rose)]">{poolErr}</p>}
+        </div>
+      ) : localPool.length > 0 ? (
+        <select className="select" value={selectedId} onChange={(e) => setSelectedId(e.target.value)}>
+          <option value="">Select the new backup…</option>
+          {[...localPool]
+            .sort((a, b) => { const ra = poolTag(a).rank, rb = poolTag(b).rank; return ra !== rb ? ra - rb : (a.load ?? 0) - (b.load ?? 0); })
+            .map((p) => {
+              const tag = poolTag(p);
+              return (
+                <option key={p.id} value={p.id}>
+                  {tag.rank === 0 ? "✓ " : tag.rank >= 3 ? "⚠ " : ""}{p.instructor_name}{p.emp_id ? ` (${p.emp_id})` : ""} · {tag.text}{p.email ? "" : " · ✉ no email"}
+                </option>
+              );
+            })}
+        </select>
+      ) : (
+        <p className="rounded-lg border border-[#f6cdd6] bg-[#fdeef1] px-3 py-2 text-sm text-[color:var(--rose)]">No other backups in this pool. Use “+ Add to pool”.</p>
+      )}
+
+      <input name="reason" className="input" placeholder="Reason (optional) — e.g. on leave" />
+      {selected && !selected.email && (
+        <p className="rounded-lg border border-[#f3d19a] bg-[#fdf6e9] px-3 py-2 text-xs text-[#8a5a00]">⚠ This backup has no email — they won’t be notified or able to upload a claim.</p>
+      )}
+      {state.error && <p className="rounded-lg border border-[#f6cdd6] bg-[#fdeef1] px-3 py-2 text-sm text-[color:var(--rose)]">{state.error}</p>}
+      <div className="flex gap-2">
+        <button type="submit" disabled={pending || !selected} className="btn btn-primary btn-sm">{pending ? "Re-assigning…" : "Re-assign backup"}</button>
+        <button type="button" onClick={() => { setOpen(false); setSelectedId(""); setAddingPool(false); setPoolErr(null); }} className="btn btn-ghost btn-sm">Cancel</button>
+      </div>
     </form>
   );
 }
