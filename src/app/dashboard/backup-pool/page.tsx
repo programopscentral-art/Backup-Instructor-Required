@@ -79,6 +79,9 @@ export default async function BackupPoolPage() {
             availability_mode: "both",
             current_status: "available",
             status: "active",
+            // A new backup always starts with 0 red flags; this also stops an empty
+            // "Red flags" box from sending an explicit null into a NOT-NULL column.
+            red_flags: 0,
             ...(!fullAccess && capIds.length === 1 ? { capability_id: capIds[0] } : {}),
           }}
           labelMaps={{ capability_id: refs.capabilities.map }}
