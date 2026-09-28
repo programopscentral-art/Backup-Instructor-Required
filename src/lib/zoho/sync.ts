@@ -19,6 +19,7 @@ const OWNER = process.env.ZOHO_APP_OWNER || "nxtwave";
 const APP = process.env.ZOHO_APP_NAME || "niat";
 const REPORT = process.env.ZOHO_REPORT_NAME || "All_Campus_Program_Operations_Tracker";
 const CATEGORY = "Backup Instructor Required";
+const STAFF_REPORT = "All_Staff_Profiles";
 
 // Only pick up tickets nobody has acted on in Zoho yet. A ticket already
 // Resolved / Discarded / In Progress over there was handled elsewhere.
@@ -112,6 +113,39 @@ async function zohoToken(): Promise<string | null> {
 }
 
 /**
+ * The raiser's full Zoho Staff Profile (the tracker report only carries name +
+ * Emp ID). Same shape the Deluge workflow sends as `raised_by_details`, so the
+ * ticket's "Raised by" card is identical to a webhook ticket. Null on any error.
+ */
+async function staffProfile(token: string, profileId: string): Promise<Record<string, string> | null> {
+  try {
+    const res = await fetch(
+      `${API}/creator/v2.1/data/${OWNER}/${APP}/report/${STAFF_REPORT}/${encodeURIComponent(profileId)}?field_config=all`,
+      { headers: { Authorization: `Zoho-oauthtoken ${token}` } },
+    );
+    const j = (await res.json().catch(() => ({}))) as { code?: number; data?: ZRec };
+    if (j.code !== 3000 || !j.data) return null;
+    const p = j.data;
+    const uni = (p.University ?? null) as Record<string, unknown> | null;
+    const out: Record<string, string> = {
+      name: disp(p.Full_Name),
+      email: disp(p.Official_Mail_ID).toLowerCase(),
+      emp_id: disp(p.Employee_ID),
+      role: disp(p.NIAT_Role),
+      department: disp(p.Department),
+      campus: disp(uni?.Campus_Name ?? uni?.zc_display_value ?? ""),
+      work_location: disp(p.Work_Location),
+      cos_of_campus: disp(p.COS_of_the_Campus),
+      reporting_manager: disp(p.Reporting_Manager),
+    };
+    for (const k of Object.keys(out)) if (!out[k]) delete out[k];
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Build the same payload the Zoho Deluge workflow sends. Fields the report
  * doesn't expose (currently Subject / Instructor / Dates / Mode) come through
  * blank — the ticket then lands as "needs admin" instead of being lost. If
@@ -194,10 +228,17 @@ export async function runZohoSync(opts: { dryRun?: boolean; hours?: number; max?
     if (result.items.length >= max) break;
 
     const payload = toPayload(r);
-    // The report has no email for the raiser — look them up in our staff
-    // directory by Employee ID so they're linked + notified like a webhook ticket.
+    // The report has no email / profile for the raiser — pull their Zoho Staff
+    // Profile; failing that, find their email in our staff directory by Emp ID.
+    const profileId = disp((r.Ticket_Raised_By_Lookup as Record<string, unknown> | null)?.ID);
+    const profile = profileId ? await staffProfile(token, profileId) : null;
+    if (profile) {
+      payload.raised_by_details = profile;
+      if (profile.name) payload.raised_by_name = profile.name;
+      if (profile.email) payload.raised_by_email = profile.email;
+    }
     const empId = (payload.raised_by_details as { emp_id?: string }).emp_id;
-    if (empId) {
+    if (empId && !payload.raised_by_email) {
       const { data: staff } = await db
         .from("university_staff")
         .select("email")
