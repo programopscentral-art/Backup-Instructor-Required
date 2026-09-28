@@ -61,6 +61,31 @@ export async function ensureSubject(db: AdminDB, name: string, capabilityId: str
   return null;
 }
 
+/** Loose word key for free text: lowercase, "&" → "and", single-spaced, padded so
+ *  `includes(" x y ")` is a whole-word phrase check. */
+const words = (s: string) => ` ${s.toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").trim()} `;
+
+/**
+ * When a ticket arrives with NO subject (optional on the Zoho form, and not
+ * exposed to the safety-net sync), look for a subject vertical named in the
+ * description, e.g. "In Gen AI, we have 9 topics pending" → "Gen AI".
+ * Conservative: whole-word match of the full vertical name (or its spaceless
+ * form, "GenAI"), and only when EXACTLY ONE vertical is mentioned — otherwise
+ * null, and the ticket stays "needs admin" as before.
+ */
+export async function inferVerticalFromText(db: AdminDB, text: string): Promise<string | null> {
+  const hay = words(text || "");
+  if (!hay.trim()) return null;
+  const { data: caps } = await db.from("capabilities").select("name").eq("status", "active");
+  const hits = ((caps ?? []) as { name: string }[])
+    .map((c) => c.name)
+    .filter((name) => {
+      const w = words(name).trim();
+      return !!w && (hay.includes(` ${w} `) || hay.includes(` ${w.replace(/ /g, "")} `));
+    });
+  return hits.length === 1 ? hits[0] : null;
+}
+
 export interface SubjectRoute {
   capabilityId: string | null;
   subjectId: string | null;

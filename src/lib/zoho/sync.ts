@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ingestZohoTicket } from "@/lib/zoho/ingest";
+import { likeEscape } from "@/lib/zoho/security";
 
 /**
  * Safety-net sync: Zoho → Backup OS.
@@ -193,6 +194,18 @@ export async function runZohoSync(opts: { dryRun?: boolean; hours?: number; max?
     if (result.items.length >= max) break;
 
     const payload = toPayload(r);
+    // The report has no email for the raiser — look them up in our staff
+    // directory by Employee ID so they're linked + notified like a webhook ticket.
+    const empId = (payload.raised_by_details as { emp_id?: string }).emp_id;
+    if (empId) {
+      const { data: staff } = await db
+        .from("university_staff")
+        .select("email")
+        .ilike("employee_id", likeEscape(empId))
+        .not("email", "is", null)
+        .limit(1);
+      payload.raised_by_email = (staff?.[0] as { email: string } | undefined)?.email ?? "";
+    }
     const item: SyncItem = {
       zohoId,
       zohoTicketId: disp(r.Ticket_ID),

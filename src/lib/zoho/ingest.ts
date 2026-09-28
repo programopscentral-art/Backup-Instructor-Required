@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notify } from "@/lib/notify";
-import { resolveSubjectName } from "@/lib/tickets/subject-routing";
+import { inferVerticalFromText, resolveSubjectName } from "@/lib/tickets/subject-routing";
 
 /**
  * Core Zoho → Backup OS ticket intake, shared by the webhook
@@ -181,8 +181,12 @@ export async function ingestZohoTicket(
   // primary routing key: Zoho sends a vertical name (e.g. "Gen AI"), which maps
   // straight to that capability's CMs. Falls back to a legacy granular subject,
   // then auto-creates an unmapped subject (→ needs admin) for anything unknown.
-  const { capabilityId, subjectId } = subjectRaw
-    ? await resolveSubjectName(db, subjectRaw)
+  // No subject sent (optional in Zoho; always blank on sync-recovered tickets) →
+  // try the vertical named in the description before falling back to needs-admin.
+  const inferredSubject = subjectRaw ? null : await inferVerticalFromText(db, `${notes} ${reason}`);
+  const subjectKey = subjectRaw || inferredSubject || "";
+  const { capabilityId, subjectId } = subjectKey
+    ? await resolveSubjectName(db, subjectKey)
     : { capabilityId: null, subjectId: null };
 
   // Resolve the raiser's app account (if they have one), and — because the Zoho
@@ -254,7 +258,7 @@ export async function ingestZohoTicket(
     actor_name: raiserName || raiserEmail || "Zoho",
     from_status: "raised",
     to_status: "raised",
-    note: `Raised via Zoho${opts.via === "sync" ? " (auto-synced — the Zoho webhook didn't deliver it)" : ""}${universityId ? "" : " — university not matched (needs admin)"}${capabilityId ? "" : "; subject has no Capability Manager"}.`,
+    note: `Raised via Zoho${opts.via === "sync" ? " (auto-synced — the Zoho webhook didn't deliver it)" : ""}${universityId ? "" : " — university not matched (needs admin)"}${capabilityId ? "" : "; subject has no Capability Manager"}${inferredSubject && capabilityId ? `; subject not filled in Zoho — routed to ${inferredSubject} from the description` : ""}.`,
   });
 
   // Notify: raiser, the subject's CMs, and all Admins/HODs.
