@@ -60,10 +60,23 @@ const segIsFiller = (seg: string) => {
  *   using the city segment to break ties. Returns null if nothing is confident enough
  *   (caller then falls back to deriving the campus from the raiser).
  */
+// Zoho campus names that are the same place as one of our universities under a
+// different name. Zoho's bare "NIAT" campus IS NIAT - Chevella (confirmed by Ops,
+// 29 Sep 2026) — without this it would match the separate "NIAT" row exactly.
+const UNI_ALIASES: Record<string, string> = {
+  "niat": "niat - chevella",
+  "niat - hyderabad": "niat - chevella",
+};
+
 function resolveUniversityId(raw: string, rows: UniRow[]): string | null {
   const q = raw.trim();
   if (!q) return null;
   const lc = q.toLowerCase();
+  const alias = UNI_ALIASES[lc.replace(/\s+/g, " ")];
+  if (alias) {
+    const hit = rows.find((r) => r.name.toLowerCase() === alias);
+    if (hit) return hit.id;
+  }
   // 1) exact code on the whole string
   const byCode = rows.find((r) => r.code && r.code.toLowerCase() === lc);
   if (byCode) return byCode.id;
